@@ -1,0 +1,2273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ER AFA & OHIP Earnings Tracker</title>
+    <!-- Tailwind CSS from CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Inline Styles -->
+    <style>
+        /* Using Inter font from Google Fonts */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Style for the active tab */
+        .tab-active {
+            border-bottom-color: #3b82f6;
+            color: #3b82f6;
+            font-weight: 600;
+        }
+
+        /* General style for table inputs and selects */
+        .table-input {
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            transition: border-color 0.2s;
+        }
+
+        /* Focus style for table inputs */
+        .table-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+        }
+        
+        .table-input:disabled {
+            background-color: #f3f4f6;
+            cursor: not-allowed;
+        }
+
+        /* Specific widths for inputs in the main table */
+        .billing-code-input {
+            width: 80px;
+        }
+        .units-input {
+            width: 60px;
+        }
+
+        /* Style for cells showing calculated values */
+        .table-cell-value {
+            min-width: 70px;
+            text-align: right;
+        }
+
+        /* Style for the total cell in a patient row */
+        .table-cell-total {
+            font-weight: 600;
+            text-align: right;
+        }
+
+        /* Style for summary cards */
+        .summary-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .summary-value {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .summary-label {
+            font-size: 0.875rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Class to disable the main app container before data is loaded */
+        #app-container.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        /* Autocomplete styles */
+        .autocomplete-container {
+            position: relative;
+        }
+
+        .autocomplete-items {
+            position: absolute;
+            border: 1px solid #d1d5db;
+            border-top: none;
+            z-index: 99;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: white;
+        }
+
+        .autocomplete-items div {
+            padding: 10px;
+            cursor: pointer;
+            background-color: #fff;
+            border-bottom: 1px solid #d1d5db;
+        }
+
+        .autocomplete-items div:hover {
+            background-color: #e9e9e9;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: opacity 0.2s ease-in-out;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            width: 90%;
+            max-width: 600px;
+            transform: scale(0.95);
+            transition: transform 0.2s ease-in-out;
+        }
+
+        /* Animation for modal appearing */
+        .modal-overlay:not(.hidden) .modal-content {
+            transform: scale(1);
+        }
+        
+        /* Styles for instructions tab */
+        #content-instructions h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.25rem;
+        }
+        #content-instructions p {
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+        #content-instructions ul {
+            list-style-type: disc;
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-full">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">ER AFA & OHIP Earnings Tracker</h1>
+            <p id="header-subtitle" class="text-gray-600 mt-2">To begin, please load the official OHIP Fee Schedule Master file (`OHIPMASTER.001` or similar).</p>
+        </header>
+        
+        <div class="mb-6 flex items-center space-x-2">
+            <button id="loadScheduleBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Load OHIP Fee Schedule File</button>
+            <button id="clearScheduleBtn" class="hidden bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Clear Stored Schedule</button>
+            <input type="file" id="scheduleFileInput" class="hidden" accept=".001">
+            <span id="schedule-status" class="ml-4 text-gray-600">Checking for stored schedule...</span>
+        </div>
+
+        <div id="app-container" class="disabled">
+            <!-- Tabs -->
+            <div class="mb-6 border-b border-gray-200">
+                <nav class="flex space-x-8" aria-label="Tabs">
+                    <button id="tab-entry" class="pb-4 px-1 border-b-2 font-medium text-sm tab-active" onclick="showTab('entry')">Shift Data Entry</button>
+                    <button id="tab-summary" class="pb-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" onclick="showTab('summary')">Billing Summary</button>
+                    <button id="tab-earnings" class="pb-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" onclick="showTab('earnings')">Shift AFA Earnings</button>
+                    <button id="tab-analytics" class="pb-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" onclick="showTab('analytics')">Analytics</button>
+                    <button id="tab-schedule" class="pb-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" onclick="showTab('schedule')">OHIP Schedule</button>
+                    <button id="tab-rates" class="pb-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" onclick="showTab('rates')">AFA Rates</button>
+                    <button id="tab-backup" class="pb-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" onclick="showTab('backup')">Backup & Restore</button>
+                    <button id="tab-instructions" class="pb-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" onclick="showTab('instructions')">Instructions</button>
+                </nav>
+            </div>
+
+            <!-- Content Area -->
+            <main>
+                <!-- Shift Data Entry Tab -->
+                <div id="content-entry">
+                    <div class="bg-white p-6 rounded-lg shadow-sm">
+                         <div class="border-b pb-4 mb-4">
+                             <h2 class="text-xl font-semibold text-gray-800 mb-4">Current Shift Details</h2>
+                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                                 <div class="lg:col-span-1">
+                                     <label for="shift-selector" class="block text-sm font-medium text-gray-700">Load Existing Shift</label>
+                                     <select id="shift-selector" class="table-input mt-1 block w-full"></select>
+                                 </div>
+                                 <div class="lg:col-span-1">
+                                     <label for="shift-date-input" class="block text-sm font-medium text-gray-700">Shift Date</label>
+                                     <input type="date" id="shift-date-input" class="table-input mt-1 block w-full">
+                                 </div>
+                                 <div class="lg:col-span-1">
+                                     <label for="shift-type-select" class="block text-sm font-medium text-gray-700">Shift Type</label>
+                                     <select id="shift-type-select" class="table-input mt-1 block w-full"></select>
+                                 </div>
+                                 <div id="stat-holiday-container" class="flex items-center pb-2 lg:col-span-1">
+                                     <input id="stat-holiday-checkbox" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded">
+                                     <label for="stat-holiday-checkbox" class="ml-2 block text-sm text-gray-900">Statutory Holiday</label>
+                                 </div>
+                             </div>
+                             
+                             <!-- On Call Hours Section (Hidden by default) -->
+                             <div id="on-call-hours-container" class="hidden mt-4 pt-4 border-t border-gray-100">
+                                 <h3 class="text-sm font-semibold text-gray-700 mb-2">On Call Hours Worked</h3>
+                                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Day (08-17) - $60/hr</label>
+                                         <input type="number" id="oncall-day-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Evening (17-00) - $72/hr</label>
+                                         <input type="number" id="oncall-evening-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Night (00-08) - $105/hr</label>
+                                         <input type="number" id="oncall-night-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Weekend - $90/hr</label>
+                                         <input type="number" id="oncall-weekend-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
+
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                            <h2 class="text-xl font-semibold text-gray-800 mb-4 md:mb-0">Patient Billings</h2>
+                            <div class="flex space-x-2 flex-wrap gap-2">
+                                <button id="deleteShiftBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Delete Shift</button>
+                                <button id="sedationCalcBtn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Sedation Calculator</button>
+                                <button id="saveDataBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Save Current Shift</button>
+                                <button id="addPatientBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Add Patient</button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                                        <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                                        <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">80+</th>
+                                        <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WSIB</th>
+                                        <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Self Pay</th>
+                                        <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IFH</th>
+                                        <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trauma</th>
+                                        <th colspan="10" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Billing Codes & Units</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">OHIP Total</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="billing-table-body" class="bg-white divide-y divide-gray-200">
+                                    <!-- Rows will be dynamically inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OHIP Summary Tab -->
+                <div id="content-summary" class="hidden">
+                     <div id="summary-cards-container" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+                </div>
+                
+                <!-- AFA Earnings Tab -->
+                <div id="content-earnings" class="hidden">
+                     <div id="earnings-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"></div>
+                     <div class="mt-6 flex justify-end space-x-2">
+                         <button id="exportJsonBtn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Export Shift to JSON</button>
+                         <button id="exportCsvBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Export Shift to CSV</button>
+                     </div>
+                </div>
+
+                <!-- Analytics Tab -->
+                <div id="content-analytics" class="hidden">
+                    <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <div class="flex flex-col md:flex-row justify-between items-center mb-6 border-b pb-4">
+                            <h2 class="text-xl font-semibold text-gray-800">Analytics Dashboard</h2>
+                            <div class="flex items-center space-x-4 mt-4 md:mt-0 flex-wrap gap-2">
+                                <div class="flex items-center space-x-2">
+                                    <input type="radio" id="analytics-view-monthly" name="analytics-view" value="monthly" checked class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500">
+                                    <label for="analytics-view-monthly" class="text-sm font-medium text-gray-700">Monthly</label>
+                                    <input type="radio" id="analytics-view-yearly" name="analytics-view" value="yearly" class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500">
+                                    <label for="analytics-view-yearly" class="text-sm font-medium text-gray-700">Yearly</label>
+                                </div>
+                                <div id="analytics-month-container">
+                                    <label for="analytics-month" class="text-sm font-medium text-gray-700">Month:</label>
+                                    <input type="month" id="analytics-month" class="table-input">
+                                </div>
+                                <div id="analytics-year-container" class="hidden">
+                                    <label for="analytics-year" class="text-sm font-medium text-gray-700">Year:</label>
+                                    <input type="number" id="analytics-year" class="table-input w-24" placeholder="YYYY">
+                                </div>
+                                <button id="exportAnalyticsCsvBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Export Report</button>
+                            </div>
+                        </div>
+                        <div id="analytics-content">
+                            <!-- Analytics cards will be injected here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OHIP Fee Schedule Tab -->
+                <div id="content-schedule" class="hidden">
+                    <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold text-gray-800">Master Fee Schedule</h2>
+                            <span id="fee-count" class="text-sm text-gray-500"></span>
+                        </div>
+                        <div class="overflow-x-auto max-h-96">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount ($)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fee-schedule-body" class="bg-white divide-y divide-gray-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- AFA Rates Tab -->
+                <div id="content-rates" class="hidden">
+                    <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <h2 class="text-xl font-semibold text-gray-800 mb-4">AFA Pay Structure</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <h3 id="rates-table-title" class="font-semibold">Base Pay per Shift (Current)</h3>
+                                <table class="min-w-full divide-y divide-gray-200 mt-2">
+                                    <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Shift</th><th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Weekday</th><th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Friday</th><th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Weekend</th></tr></thead>
+                                    <tbody id="base-pay-table"></tbody>
+                                </table>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold">Per-Patient Amount</h3>
+                                <table class="min-w-full divide-y divide-gray-200 mt-2">
+                                    <thead class="bg-gray-50"><tr><th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Period</th><th class="px-4 py-2 text-right text-xs font-medium text-gray-500">Amount</th></tr></thead>
+                                    <tbody id="per-patient-table"></tbody>
+                                </table>
+                                <p class="text-sm text-gray-600 mt-2">+ $15.00 for patients age 80+ (OHIP & Self Pay)</p>
+                                <p class="text-sm text-gray-600 mt-2">+ $85.00 for WSIB patients</p>
+                                <hr class="my-4">
+                                <h3 class="font-semibold">On Call Hourly Rates</h3>
+                                <ul class="text-sm text-gray-600 mt-2 space-y-1">
+                                    <li>Day (08:00–17:00): $60/hr</li>
+                                    <li>Evening (17:00–00:00): $72/hr</li>
+                                    <li>Night (00:00–08:00): $105/hr</li>
+                                    <li>Weekend: $90/hr</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Backup & Restore Tab -->
+                 <div id="content-backup" class="hidden">
+                    <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <h2 class="text-xl font-semibold text-gray-800 mb-4">Backup & Restore Data</h2>
+                        <p class="text-gray-600 mb-6">Backup all your shift data to a single JSON file for safekeeping or to transfer to another computer. Restore from a backup file to repopulate your data.</p>
+                        <div class="flex space-x-4">
+                            <button id="backupDataBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Backup All Data to File</button>
+                            <button id="restoreDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Restore from File</button>
+                            <input type="file" id="restoreFileInput" class="hidden" accept=".json">
+                        </div>
+                        <hr class="my-8">
+                        <h2 class="text-xl font-semibold text-gray-800 mb-4">Import Single Shift</h2>
+                        <p class="text-gray-600 mb-6">Import a single shift from a JSON file (e.g., from a previous version of the app). If a shift for the same date already exists, you will be asked to confirm before overwriting it.</p>
+                        <div class="flex space-x-4">
+                            <button id="importShiftBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">Import Single Shift from File</button>
+                            <input type="file" id="importShiftFileInput" class="hidden" accept=".json">
+                        </div>
+                    </div>
+                 </div>
+
+                <!-- Instructions Tab -->
+                <div id="content-instructions" class="hidden">
+                    <div class="bg-white p-6 rounded-lg shadow-sm">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">How to Use the AFA Tracker</h2>
+
+                        <h3>Getting Started: First-Time Setup</h3>
+                        <p>Before you can use the calculator, you must load the OHIP Fee Schedule. This file contains all the official billing codes and their values.</p>
+                        <ul>
+                            <li>Click the <strong>"Load OHIP Fee Schedule File"</strong> button.</li>
+                            <li>Select the master file from your computer (usually named `OHIPMASTER.001` or similar).</li>
+                            <li>The app will parse the file and save it to your browser's local storage. This is a one-time setup. You won't need to load the file again unless it's updated or you clear your browser's storage.</li>
+                        </ul>
+
+                        <h3>Managing Shifts</h3>
+                        <p>All of your shifts are stored securely in your browser's database. No more managing individual files!</p>
+                        <ul>
+                            <li><strong>Creating a New Shift:</strong> Select <strong>"-- Create New Shift --"</strong> from the "Load Existing Shift" dropdown. The "Shift Date" field will become active. Choose a date, select the correct "Shift Type", and begin adding patients.</li>
+                            <li><strong>On Call Shifts:</strong> Select "On Call" from the shift type dropdown. Enter the hours worked in the respective fields (Day, Evening, Night, Weekend) to calculate base pay automatically.</li>
+                            <li><strong>Loading an Existing Shift:</strong> Simply select a date from the "Load Existing Shift" dropdown to view or edit its data.</li>
+                            <li><strong>Saving a Shift:</strong> After entering or editing data, click the <strong>"Save Current Shift"</strong> button. This will save the shift to your local database. If you try to save a new shift on a date that already has a saved shift, the app will ask you to confirm before overwriting.</li>
+                            <li><strong>Deleting a Shift:</strong> Load the shift you wish to remove, then click the <strong>"Delete Shift"</strong> button. You will be asked to confirm this action.</li>
+                        </ul>
+
+                        <h3>Entering Patient Billings</h3>
+                        <ul>
+                            <li>Click <strong>"Add Patient"</strong> to add a new row to the table.</li>
+                            <li>Use the checkboxes for each patient to specify categories like "80+", "WSIB", "IFH", etc.</li>
+                            <li>In the "Billing Codes & Units" section, start typing a billing code. An autocomplete list will appear to help you. Select a code or type it fully.</li>
+                            <li>The "Units" field defaults to 1. Change it if necessary for the specific code.</li>
+                             <li><strong>Referred Procedures:</strong> If you perform a procedure (like a fracture reduction) and then refer the patient to a specialist, check the <strong>"Ref"</strong> box next to that specific billing code. This will automatically reduce the value of that code (and any attached premiums like E412/E413) by 25% to reflect the correct billing amount.</li>
+                            <li>The OHIP total for each patient and the summaries at the top will update automatically as you enter data.</li>
+                        </ul>
+
+                        <h3>Viewing Summaries & Earnings</h3>
+                        <p>As you enter data, the application automatically calculates your earnings. You can view these calculations in different tabs for the currently selected shift:</p>
+                        <ul>
+                            <li><strong>Billing Summary Tab:</strong> Shows a simple summary of the total OHIP value billed, the number of patients, and the average billing per patient.</li>
+                            <li><strong>Shift AFA Earnings Tab:</strong> This is where you see the detailed breakdown of your actual take-home pay. It includes your base pay, per-patient earnings, and all shadow billing calculations for the shift.</li>
+                        </ul>
+
+                        <h3>Analytics Dashboard</h3>
+                        <p>The "Analytics" tab gives you powerful insights into your earnings over time.</p>
+                        <ul>
+                            <li>Use the month selector at the top to choose the month and year you wish to analyze.</li>
+                            <li>The dashboard will display your total earnings, shifts worked, averages, and a breakdown of patient types for that period.</li>
+                            <li>Click <strong>"Export Report to CSV"</strong> to download a spreadsheet of all shifts from the selected month for your own records.</li>
+                        </ul>
+                        
+                        <h3>Data Management: Backup & Restore</h3>
+                        <p>Your data is valuable. Use the features in the "Backup & Restore" tab to keep it safe.</p>
+                        <ul>
+                            <li><strong>Backup All Data to File:</strong> This is the most important button for data safety. It saves your <em>entire</em> shift database into a single JSON file. Do this regularly and save the file to a secure location (like a cloud drive or external hard drive).</li>
+                            <li><strong>Restore from File:</strong> Use this if you move to a new computer or need to recover from a data loss event. It will completely overwrite your current database with the data from the backup file you select.</li>
+                            <li><strong>Import Single Shift from File:</strong> This is useful for adding old shift files saved with a previous version of this app. It will add one shift to your database.</li>
+                        </ul>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Sedation Calculator Modal -->
+    <div id="sedationModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 class="text-2xl font-bold mb-4">Sedation Billing Calculator</h2>
+            <p class="text-sm text-gray-600 mb-4">Enter the OHIP **anaesthesia** procedure code (e.g., Z-codes, F-codes) to calculate base units.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Inputs -->
+                <div>
+                    <label for="sedationProcCode" class="block text-sm font-medium text-gray-700">Anaesthesia Procedure Code</label>
+                    <input type="text" id="sedationProcCode" class="table-input mt-1 block w-full" placeholder="e.g., Z399, F046">
+
+                    <label for="sedationTimeSelect" class="block text-sm font-medium text-gray-700 mt-4">Total Anaesthesia Time</label>
+                    <select id="sedationTimeSelect" class="table-input mt-1 block w-full">
+                        <option value="0">None (0 time units)</option>
+                        <option value="15" selected>15 minutes or less (1 time unit)</option>
+                        <option value="30">30 minutes or less (2 time units)</option>
+                        <option value="45">45 minutes or less (3 time units)</option>
+                        <option value="60">60 minutes or less (4 time units)</option>
+                    </select>
+
+                    <div id="sedationModifiers" class="mt-4 space-y-4">
+                        <!-- Modifiers will be populated here -->
+                    </div>
+                </div>
+                <!-- Calculation Breakdown -->
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h3 class="text-lg font-medium text-gray-900">Billing Breakdown</h3>
+                    <dl class="mt-2 space-y-2 text-sm">
+                        <div class="flex justify-between"><dt>Base Units:</dt><dd id="sedationBaseUnits">0</dd></div>
+                        <div class="flex justify-between"><dt>Time Units:</dt><dd id="sedationTimeUnits">0</dd></div>
+                        <div class="flex justify-between"><dt>Modifier Units:</dt><dd id="sedationModifierUnits">0</dd></div>
+                        <hr>
+                        <div class="flex justify-between font-semibold"><dt>Total Basic Units:</dt><dd id="sedationTotalBasicUnits">0</dd></div>
+                        <div class="flex justify-between"><dt>Premium:</dt><dd id="sedationPremiumPercent">0%</dd></div>
+                        <hr>
+                        <div class="flex justify-between font-bold text-lg mt-4 text-blue-600"><dt>Total Billed:</dt><dd id="sedationTotalBilled">$0.00</dd></div>
+                        <div class="flex justify-between text-sm text-gray-600 mt-2"><dt>Equivalent billable units:</dt><dd id="sedationEquivalentUnits">0.00</dd></div>
+                    </dl>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-2">
+                <button id="closeSedationModal" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
+                <button id="addSedationToPatient" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">Add to Patient</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic Confirmation/Alert Modal -->
+    <div id="genericModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="genericModalTitle" class="text-2xl font-bold mb-4">Confirmation</h2>
+            <p id="genericModalMessage" class="mb-6">Are you sure?</p>
+            <div id="genericModalButtons" class="mt-6 flex justify-end space-x-2">
+                <!-- Buttons will be injected here by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Inline JavaScript -->
+    <script>
+    // --- DATABASE HELPERS ---
+    const DB_NAME = 'ohipCalculatorDB';
+    const DB_VERSION = 2; // Incremented version to handle schema upgrade
+    const FEE_STORE_NAME = 'feeScheduleStore';
+    const SHIFT_STORE_NAME = 'shiftsStore';
+    let db;
+
+    /**
+     * Opens and initializes the IndexedDB database.
+     * @returns {Promise<IDBDatabase>} A promise that resolves with the database instance.
+     */
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+            request.onupgradeneeded = event => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(FEE_STORE_NAME)) {
+                    db.createObjectStore(FEE_STORE_NAME, { keyPath: 'id' });
+                }
+                if (!db.objectStoreNames.contains(SHIFT_STORE_NAME)) {
+                    db.createObjectStore(SHIFT_STORE_NAME, { keyPath: 'id' });
+                }
+            };
+
+            request.onsuccess = event => {
+                db = event.target.result;
+                resolve(db);
+            };
+
+            request.onerror = event => {
+                console.error('Database error:', event.target.errorCode);
+                reject(event.target.errorCode);
+            };
+        });
+    }
+
+    /**
+     * Generic function to save data to a specific store in IndexedDB.
+     * @param {string} storeName - The name of the object store.
+     * @param {Object} data - The data object to save. It must have an 'id' property.
+     */
+    function saveDataToDB(storeName, data) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                reject("Database not open.");
+                return;
+            };
+            const transaction = db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const request = store.put(data);
+            request.onsuccess = () => resolve();
+            request.onerror = (event) => reject(event.target.error);
+        });
+    }
+    
+    /**
+     * Generic function to get data from a specific store in IndexedDB.
+     * @param {string} storeName - The name of the object store.
+     * @param {string} id - The id of the object to retrieve.
+     * @returns {Promise<Object|null>}
+     */
+    function getDataFromDB(storeName, id) {
+        return new Promise((resolve) => {
+            if (!db) {
+                resolve(null);
+                return;
+            }
+            const transaction = db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
+            const request = store.get(id);
+
+            request.onsuccess = event => resolve(event.target.result ? event.target.result : null);
+            request.onerror = () => resolve(null);
+        });
+    }
+
+    /**
+     * Generic function to get all data from a specific store in IndexedDB.
+     * @param {string} storeName - The name of the object store.
+     * @returns {Promise<Array>}
+     */
+    function getAllDataFromDB(storeName) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                reject("Database not open.");
+                return;
+            }
+            const transaction = db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
+            const request = store.getAll();
+
+            request.onsuccess = event => resolve(event.target.result);
+            request.onerror = (event) => reject(event.target.error);
+        });
+    }
+
+    /**
+     * Generic function to delete an item from a store in IndexedDB.
+     * @param {string} storeName - The name of the object store.
+     * @param {string} id - The id of the object to delete.
+     * @returns {Promise<void>}
+     */
+    function deleteDataFromDB(storeName, id) {
+         return new Promise((resolve, reject) => {
+            if (!db) {
+                reject("Database not open.");
+                return;
+            };
+            const transaction = db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = (event) => reject(event.target.error);
+        });
+    }
+
+    /**
+     * Clears all data from a specified object store.
+     * @param {string} storeName The name of the object store to clear.
+     * @returns {Promise<void>}
+     */
+    function clearStoreFromDB(storeName) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                reject('Database not open');
+                return;
+            }
+            const transaction = db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = (event) => reject(event.target.error);
+        });
+    }
+
+    // --- DATA ---
+    let ohipFeeSchedule = {};
+    let ohipFeeCodes = [];
+    let anaesthesiaBaseUnits = {};
+    const ANAESTHESIA_UNIT_FEE = 15.49;
+    const RELATIVITY_PREMIUM = 1.10; // 10% Relativity Increase
+
+    const sedationModifiers = {
+        age: [ { code: 'E014C', label: 'Newborn to 28 days', units: 5 }, { code: 'E009C', label: 'Infant 29 days to 1 year', units: 4 }, { code: 'E019C', label: 'Child 1 to 8 years', units: 2 }, { code: 'E007C', label: 'Adult 70-79 years', units: 1 }, { code: 'E018C', label: 'Adult > 79 years', units: 3 } ],
+        asa: [ { code: 'NONE', label: 'ASA I or II', units: 0 }, { code: 'E022C', label: 'ASA III', units: 2 }, { code: 'E017C', label: 'ASA IV', units: 10 }, { code: 'E016C', label: 'ASA V', units: 20 } ],
+        position: [ { code: 'E011C', label: 'Prone', units: 4 }, { code: 'E024C', label: 'Upright/Sitting (>60°)', units: 4 } ],
+        condition: [ { code: 'E010C', label: 'BMI > 40', units: 2 } ],
+        time: [ { code: 'NONE', label: 'None', premium: 1.0 }, { code: 'E400C', label: 'Evening/Weekend (50%)', premium: 1.5 }, { code: 'E401C', label: 'Night (75%)', premium: 1.75 } ]
+    };
+
+    // --- AFA RATE TABLES ---
+    
+    // JUNE 2025 RATES (Current Standard)
+    const june2025Rates = {
+        'Shift 1 - Casino - 04:00': { weekday: 980, friday: 980, weekend: 1270, startTime: '04:00' },
+        'Shift 2 - 07:00': { weekday: 650, friday: 650, weekend: 850, startTime: '07:00' },
+        'Shift 3 - Ozone - 06:00': { weekday: 730, friday: 730, weekend: 950, startTime: '06:00' },
+        'Shift 4 - Ozone - 09:00': { weekday: 610, friday: 610, weekend: 790, startTime: '09:00' },
+        'Shift 5 - 10:00': { weekday: 600, friday: 600, weekend: 780, startTime: '10:00' },
+        'Float Trial - 11:00': { weekday: 600, friday: 600, weekend: 780, startTime: '11:00' },
+        'Shift 6 - 12:00': { weekday: 620, friday: 670, weekend: 810, startTime: '12:00' },
+        'Shift 7 - Ozone - 12:00': { weekday: 660, friday: 720, weekend: 860, startTime: '12:00' },
+        'Shift 8 - 14:00': { weekday: 640, friday: 750, weekend: 830, startTime: '14:00' },
+        'Shift 9 - Ozone - 14:00': { weekday: 640, friday: 750, weekend: 830, startTime: '14:00' },
+        'Float 3 PM - 15:00': { weekday: 700, friday: 850, weekend: 910, startTime: '15:00' },
+        'Shift 10 - Ozone - 15:00': { weekday: 700, friday: 850, weekend: 910, startTime: '15:00' },
+        'Shift 11 - 16:00': { weekday: 700, friday: 880, weekend: 910, startTime: '16:00' },
+        'Shift 12 - Float - 17:00': { weekday: 700, friday: 910, weekend: 910, startTime: '17:00' },
+        'Shift 13 - 18:00': { weekday: 730, friday: 950, weekend: 950, startTime: '18:00' },
+        'Shift 14 - Ozone - 18:00': { weekday: 700, friday: 910, weekend: 910, startTime: '18:00' },
+        'Shift 15 - 20:00': { weekday: 880, friday: 1140, weekend: 1140, startTime: '20:00' },
+        'Shift 16 - Ozone - 20:00': { weekday: 850, friday: 1110, weekend: 1110, startTime: '20:00' },
+        'Shift 17 - Casino - 22:00': { weekday: 1070, friday: 1390, weekend: 1390, startTime: '22:00' },
+        'Shift 18 - Casino - 23:00': { weekday: 1120, friday: 1460, weekend: 1460, startTime: '23:00' },
+        'Shift 19 - Night - 23:59': { weekday: 1240, friday: 1610, weekend: 1610, startTime: '23:59' }
+    };
+
+    // SEPT 2025 RATES (Future/Legacy compatibility) - Updated logic to Dec 1st
+    const sept2025Rates = {
+        'Shift 1 - Casino - 04:00': { weekday: 980, friday: 980, weekend: 1270, startTime: '04:00' },
+        'Shift 2 - Ozone - 05:00': { weekday: 820, friday: 820, weekend: 1070, startTime: '05:00' },
+        'Shift 3 - 07:00': { weekday: 650, friday: 650, weekend: 850, startTime: '07:00' },
+        'Shift 4 - Ozone - 08:00': { weekday: 610, friday: 640, weekend: 790, startTime: '08:00' },
+        'Shift 5 - 09:00': { weekday: 600, friday: 630, weekend: 780, startTime: '09:00' },
+        'Shift 6 - Ozone - 10:00': { weekday: 620, friday: 670, weekend: 810, startTime: '10:00' },
+        'Shift 7 - 11:00': { weekday: 620, friday: 700, weekend: 810, startTime: '11:00' },
+        'Shift 8 - 13:00': { weekday: 640, friday: 780, weekend: 830, startTime: '13:00' },
+        'Shift 9 - Ozone - 13:00': { weekday: 640, friday: 780, weekend: 830, startTime: '13:00' },
+        'Shift 10 - Ozone - 15:00': { weekday: 700, friday: 910, weekend: 910, startTime: '15:00' },
+        'Shift 11 - 15:00': { weekday: 700, friday: 910, weekend: 910, startTime: '15:00' },
+        'Shift 12 - Ozone - 17:00': { weekday: 670, friday: 870, weekend: 870, startTime: '17:00' },
+        'Shift 13 - 17:00': { weekday: 670, friday: 870, weekend: 870, startTime: '17:00' },
+        'Shift 14 - 19:00': { weekday: 780, friday: 1010, weekend: 1010, startTime: '19:00' },
+        'Shift 15 - Ozone - 19:00': { weekday: 780, friday: 1010, weekend: 1010, startTime: '19:00' },
+        'Shift 16 - 20:00': { weekday: 880, friday: 1140, weekend: 1140, startTime: '20:00' },
+        'Shift 17 - Ozone - 21:00': { weekday: 950, friday: 1240, weekend: 1240, startTime: '21:00' },
+        'Shift 18 - Casino - 22:00': { weekday: 1070, friday: 1390, weekend: 1390, startTime: '22:00' },
+        'Shift 19 - Casino - 23:00': { weekday: 1120, friday: 1460, weekend: 1460, startTime: '23:00' },
+        'Shift 20 - Overnight - 23:59': { weekday: 1240, friday: 1610, weekend: 1610, startTime: '23:59' }
+    };
+
+    const afaRates = {
+        perPatient: { day: 32.18, evening: 38.30, night: 59.54, weekend: 51.49 },
+        agePremium: 15, wsibPremium: 85
+    };
+    
+    // On Call Rates
+    const onCallRates = {
+        day: 60,
+        evening: 72,
+        night: 105,
+        weekend: 90
+    };
+
+    // --- STATE ---
+    let patientCounter = 0;
+    let currentAutocompleteInput = null;
+    let allShifts = []; // Local cache of all shifts from the DB
+    let activeBasePay = null; // Stores saved base pay for currently loaded shift
+
+    // --- DOM ELEMENTS ---
+    const appContainer = document.getElementById('app-container');
+    const loadScheduleBtn = document.getElementById('loadScheduleBtn');
+    const clearScheduleBtn = document.getElementById('clearScheduleBtn');
+    const scheduleFileInput = document.getElementById('scheduleFileInput');
+    const scheduleStatus = document.getElementById('schedule-status');
+    const addPatientBtn = document.getElementById('addPatientBtn');
+    const saveDataBtn = document.getElementById('saveDataBtn');
+    const deleteShiftBtn = document.getElementById('deleteShiftBtn');
+    const billingTableBody = document.getElementById('billing-table-body');
+    const summaryCardsContainer = document.getElementById('summary-cards-container');
+    const earningsCardsContainer = document.getElementById('earnings-cards-container');
+    const feeCountSpan = document.getElementById('fee-count');
+    const sedationCalcBtn = document.getElementById('sedationCalcBtn');
+    const sedationModal = document.getElementById('sedationModal');
+    const closeSedationModal = document.getElementById('closeSedationModal');
+    const addSedationToPatient = document.getElementById('addSedationToPatient');
+    const shiftSelector = document.getElementById('shift-selector');
+    const shiftDateInput = document.getElementById('shift-date-input');
+    const shiftTypeSelect = document.getElementById('shift-type-select');
+    const statHolidayCheckbox = document.getElementById('stat-holiday-checkbox');
+    const statHolidayContainer = document.getElementById('stat-holiday-container');
+    const onCallHoursContainer = document.getElementById('on-call-hours-container');
+    const onCallDayHours = document.getElementById('oncall-day-hours');
+    const onCallEveningHours = document.getElementById('oncall-evening-hours');
+    const onCallNightHours = document.getElementById('oncall-night-hours');
+    const onCallWeekendHours = document.getElementById('oncall-weekend-hours');
+    
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const exportJsonBtn = document.getElementById('exportJsonBtn');
+    const genericModal = document.getElementById('genericModal');
+    const genericModalTitle = document.getElementById('genericModalTitle');
+    const genericModalMessage = document.getElementById('genericModalMessage');
+    const genericModalButtons = document.getElementById('genericModalButtons');
+    const headerSubtitle = document.getElementById('header-subtitle');
+    const analyticsMonthInput = document.getElementById('analytics-month');
+    const analyticsContent = document.getElementById('analytics-content');
+    const exportAnalyticsCsvBtn = document.getElementById('exportAnalyticsCsvBtn');
+    const backupDataBtn = document.getElementById('backupDataBtn');
+    const restoreDataBtn = document.getElementById('restoreDataBtn');
+    const restoreFileInput = document.getElementById('restoreFileInput');
+    const importShiftBtn = document.getElementById('importShiftBtn');
+    const importShiftFileInput = document.getElementById('importShiftFileInput');
+    const analyticsViewMonthlyRadio = document.getElementById('analytics-view-monthly');
+    const analyticsViewYearlyRadio = document.getElementById('analytics-view-yearly');
+    const analyticsMonthContainer = document.getElementById('analytics-month-container');
+    const analyticsYearContainer = document.getElementById('analytics-year-container');
+    const analyticsYearInput = document.getElementById('analytics-year');
+
+
+    // --- FUNCTIONS ---
+
+    /**
+     * Displays a generic, customizable modal for confirmations or alerts.
+     * @param {string} title - The title of the modal.
+     * @param {string} message - The message content of the modal.
+     * @param {Array<Object>} buttons - An array of button objects, e.g., [{text, class, onClick}].
+     */
+    function showModal(title, message, buttons) {
+        genericModalTitle.textContent = title;
+        genericModalMessage.innerHTML = message;
+        genericModalButtons.innerHTML = ''; 
+
+        buttons.forEach(btn => {
+            const buttonEl = document.createElement('button');
+            buttonEl.textContent = btn.text;
+            buttonEl.className = btn.class;
+            buttonEl.addEventListener('click', () => {
+                hideModal();
+                if (btn.onClick) btn.onClick();
+            });
+            genericModalButtons.appendChild(buttonEl);
+        });
+
+        genericModal.classList.remove('hidden');
+    }
+
+    function hideModal() { genericModal.classList.add('hidden'); }
+
+    function initializeWithScheduleData(scheduleData) {
+        ohipFeeSchedule = scheduleData.schedule;
+        ohipFeeCodes = Object.keys(ohipFeeSchedule).sort();
+        anaesthesiaBaseUnits = scheduleData.anaeUnitsData;
+
+        populateFeeScheduleTable();
+        appContainer.classList.remove('disabled');
+        scheduleStatus.textContent = `Fee schedule loaded successfully with ${Object.keys(ohipFeeSchedule).length} codes.`;
+        scheduleStatus.classList.add('text-green-600');
+        loadScheduleBtn.classList.add('hidden');
+        clearScheduleBtn.classList.remove('hidden');
+        headerSubtitle.textContent = 'OHIP Fee Schedule is loaded from your browser\'s memory. Clear it to load a new file.';
+    }
+
+    function parseFeeScheduleData(data) {
+        const schedule = {};
+        const anaeUnitsData = {};
+        const lines = data.trim().split('\n');
+        const today = new Date();
+        const yyyymmdd = today.getFullYear().toString() + (today.getMonth() + 1).toString().padStart(2, '0') + today.getDate().toString().padStart(2, '0');
+
+        lines.forEach(line => {
+            if (line.length < 54) return;
+            const codeWithSuffix = line.substring(0, 5).trim();
+            const code = line.substring(0, 4).trim();
+            const termDate = line.substring(12, 20);
+            if (termDate !== '99999999' && termDate < yyyymmdd) return;
+
+            const providerFee = parseInt(line.substring(20, 31), 10) / 10000.00;
+            const specialistFee = parseInt(line.substring(42, 53), 10) / 10000.00;
+            const amount = Math.max(providerFee, specialistFee);
+            const anaeUnits = parseInt(line.substring(31, 34).trim(), 10);
+
+            if (codeWithSuffix === 'E412A' || codeWithSuffix === 'E413A') {
+                schedule[codeWithSuffix] = { description: 'Special Premium', amount: 0, isModifier: true, anaeUnits: 0 };
+            } else if (amount > 0) {
+                schedule[codeWithSuffix] = { description: 'Official OHIP Fee', amount: amount, anaeUnits: anaeUnits || 0 };
+                if (!schedule[code]) schedule[code] = { description: 'Official OHIP Fee', amount: amount, anaeUnits: anaeUnits || 0 };
+            }
+            if (!isNaN(anaeUnits) && anaeUnits > 0) {
+                anaeUnitsData[codeWithSuffix] = anaeUnits;
+                if (!anaeUnitsData[code]) anaeUnitsData[code] = anaeUnits;
+            }
+        });
+        
+        schedule['E409C'] = { description: 'OT Evening Premium', amount: 15.80, anaeUnits: 0 };
+        schedule['E410C'] = { description: 'OT Night Premium', amount: 21.05, anaeUnits: 0 };
+        schedule['E411C'] = { description: 'OT Sat/Sun/Holiday Premium', amount: 31.55, anaeUnits: 0 };
+        schedule['E420'] = { description: 'Trauma Premium', amount: 0, isModifier: true, anaeUnits: 0 };
+        schedule['J149'] = { description: 'Ultrasound Guidance - Procedure', amount: 36.85, anaeUnits: 0 };
+
+        const fullScheduleData = { schedule, anaeUnitsData };
+        
+        saveDataToDB(FEE_STORE_NAME, {id: 'ohipSchedule', data: fullScheduleData});
+        initializeWithScheduleData(fullScheduleData);
+    }
+
+    function showTab(tabName) {
+        const tabs = ['entry', 'summary', 'earnings', 'schedule', 'rates', 'analytics', 'backup', 'instructions'];
+        tabs.forEach(tab => {
+            document.getElementById(`content-${tab}`)?.classList.add('hidden');
+            document.getElementById(`tab-${tab}`)?.classList.remove('tab-active');
+        });
+        
+        document.getElementById(`content-${tabName}`).classList.remove('hidden');
+        document.getElementById(`tab-${tabName}`).classList.add('tab-active');
+
+        if (tabName === 'summary' || tabName === 'earnings') updateViews();
+        if (tabName === 'analytics') generateAnalyticsReport();
+    }
+
+    function getCodeValue(code) {
+        const upperCode = code.toUpperCase();
+        if (upperCode.endsWith('C') && !ohipFeeSchedule[upperCode]) return ANAESTHESIA_UNIT_FEE;
+        return ohipFeeSchedule[upperCode] ? ohipFeeSchedule[upperCode].amount : 0;
+    }
+
+    function calculatePatientTotal(row) {
+        const codeInputs = row.querySelectorAll('.billing-code-input');
+        const unitsInputs = row.querySelectorAll('.units-input');
+        const valueCells = row.querySelectorAll('.table-cell-value');
+        const referredCheckboxes = row.querySelectorAll('.is-referred');
+        
+        // This array will store the final calculated value for each of the 10 billing slots.
+        const itemValues = new Array(codeInputs.length).fill(0);
+
+        // --- Pass 1: Calculate base value for all non-premium codes ---
+        codeInputs.forEach((input, index) => {
+            const code = input.value.toUpperCase();
+            const units = parseInt(unitsInputs[index].value, 10) || 1;
+            
+            if (!code) {
+                valueCells[index].textContent = '-';
+                return;
+            }
+
+            // Only calculate for non-percentage-based codes in this pass
+            if (code !== 'E412A' && code !== 'E412' && code !== 'E413A' && code !== 'E413') {
+                const value = getCodeValue(code);
+                itemValues[index] = value * units;
+            }
+        });
+
+        // --- Pass 2: Calculate positional premiums (E412/E413) ---
+        // These are based on the value of the item immediately to the left.
+        codeInputs.forEach((input, index) => {
+            const code = input.value.toUpperCase();
+            const units = parseInt(unitsInputs[index].value, 10) || 1;
+
+            if ((code === 'E412A' || code === 'E412' || code === 'E413A' || code === 'E413') && index > 0) {
+                // Get value of the code to the immediate left (from Pass 1)
+                const previousItemValue = itemValues[index - 1]; 
+                let premiumValue = 0;
+
+                if (code === 'E412A' || code === 'E412') {
+                    premiumValue = previousItemValue * 0.20 * units;
+                } else if (code === 'E413A' || code === 'E413') {
+                    premiumValue = previousItemValue * 0.40 * units;
+                }
+                itemValues[index] = premiumValue;
+            }
+        });
+
+        // --- Pass 3: Apply the 75% referral reduction ---
+        // A copy is made so the reduction doesn't affect subsequent premium calculations if the logic were changed.
+        const finalItemValues = [...itemValues];
+        referredCheckboxes.forEach((checkbox, index) => {
+            if (checkbox.checked) {
+                // Reduce the value of the code itself
+                finalItemValues[index] *= 0.75;
+
+                // Check if the NEXT code is a premium applied to this one.
+                if (index + 1 < codeInputs.length) {
+                    const nextCode = codeInputs[index + 1].value.toUpperCase();
+                    if (nextCode === 'E412A' || nextCode === 'E412' || nextCode === 'E413A' || nextCode === 'E413') {
+                        // If so, reduce the premium's value as well.
+                        finalItemValues[index + 1] *= 0.75;
+                    }
+                }
+            }
+        });
+        
+        // Update the individual value displays in the UI
+        finalItemValues.forEach((value, index) => {
+             valueCells[index].textContent = itemValues[index] > 0 ? value.toFixed(2) : '-';
+        });
+
+        // --- Final Summation ---
+        // Sum up all calculated and potentially reduced values
+        let subTotal = finalItemValues.reduce((sum, value) => sum + value, 0);
+
+        // Apply 10% Relativity Increase
+        subTotal = subTotal * RELATIVITY_PREMIUM;
+
+        let finalTotal = row.querySelector('.is-trauma').checked ? subTotal * 1.5 : subTotal;
+
+        row.querySelector('.table-cell-total').textContent = `$${finalTotal.toFixed(2)}`;
+        updateViews();
+    }
+
+
+    function addPatientRow(data = null) {
+        patientCounter++;
+        const row = document.createElement('tr');
+        row.classList.add('patient-row');
+        
+        let codeCells = '';
+        for (let i = 0; i < 10; i++) {
+            const codeData = data && data.codes[i] ? data.codes[i] : {};
+            const code = codeData.code || '';
+            const units = codeData.units || '1';
+            const isReferred = codeData.isReferred || false;
+            
+            codeCells += `
+                <td class="p-2">
+                    <div class="flex items-center space-x-1 autocomplete-container">
+                        <input type="text" class="table-input billing-code-input" placeholder="Code" value="${code}">
+                        <input type="number" class="table-input units-input" value="${units}" min="1">
+                        <span class="table-cell-value text-gray-500">-</span>
+                        <div class="flex items-center ml-2">
+                            <input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-referred" ${isReferred ? 'checked' : ''}>
+                            <label class="ml-1 text-xs text-gray-600">Ref</label>
+                        </div>
+                    </div>
+                </td>`;
+        }
+        
+        row.innerHTML = `
+            <td class="p-2 text-center">${patientCounter}</td>
+            <td class="p-2"><select class="table-input time-period" style="min-width: 90px;"><option>day</option><option>evening</option><option>night</option><option>weekend</option></select></td>
+            <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded age-80-plus" ${data && data.age80plus ? 'checked' : ''}></td>
+            <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-wsib" ${data && data.isWSIB ? 'checked' : ''}></td>
+            <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-self-pay" ${data && data.isSelfPay ? 'checked' : ''}></td>
+            <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-ifh" ${data && data.isIFH ? 'checked' : ''}></td>
+            <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-trauma" ${data && data.isTrauma ? 'checked' : ''}></td>
+            ${codeCells}
+            <td class="p-2 table-cell-total">$0.00</td>
+            <td class="p-2 text-center"><button class="text-red-500 hover:text-red-700 remove-btn font-bold text-xl">&times;</button></td>
+        `;
+        
+        row.querySelector('.time-period').value = data ? data.timePeriod : 'day';
+        billingTableBody.appendChild(row);
+
+        row.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', () => calculatePatientTotal(row.closest('.patient-row')));
+            if (input.classList.contains('billing-code-input')) {
+                input.addEventListener('keyup', handleAutocomplete);
+                input.addEventListener('change', () => { input.value = input.value.toUpperCase(); });
+            }
+        });
+        
+        row.querySelector('.remove-btn').addEventListener('click', () => {
+            row.remove();
+            document.querySelectorAll('.patient-row').forEach((r, i) => { r.cells[0].textContent = i + 1; });
+            patientCounter = document.querySelectorAll('.patient-row').length;
+            updateViews();
+        });
+
+        if (data) calculatePatientTotal(row);
+    }
+
+    function updateViews() {
+        displayCurrentShiftSummary();
+        displayCurrentShiftEarnings();
+    }
+
+    function displayCurrentShiftSummary() {
+        const rows = document.querySelectorAll('.patient-row');
+        
+        let totalBillings = 0;
+        const patientCount = rows.length;
+
+        let ohipPatientCount = 0, ohipTotalBilling = 0;
+        let wsibPatientCount = 0, wsibTotalBilling = 0;
+        let ifhPatientCount = 0, ifhTotalBilling = 0;
+        let selfPayPatientCount = 0, selfPayTotalBilling = 0;
+
+        rows.forEach(row => {
+            const rowTotal = parseFloat(row.querySelector('.table-cell-total').textContent.replace('$', '')) || 0;
+            totalBillings += rowTotal;
+
+            if (row.querySelector('.is-wsib').checked) {
+                wsibPatientCount++;
+                wsibTotalBilling += rowTotal;
+            } else if (row.querySelector('.is-ifh').checked) {
+                ifhPatientCount++;
+                ifhTotalBilling += rowTotal;
+            } else if (row.querySelector('.is-self-pay').checked) {
+                selfPayPatientCount++;
+                selfPayTotalBilling += rowTotal;
+            } else {
+                ohipPatientCount++;
+                ohipTotalBilling += rowTotal;
+            }
+        });
+        
+        const avgOhipBilling = ohipPatientCount > 0 ? ohipTotalBilling / ohipPatientCount : 0;
+        const avgWsibBilling = wsibPatientCount > 0 ? wsibTotalBilling / wsibPatientCount : 0;
+        const avgIfhBilling = ifhPatientCount > 0 ? ifhTotalBilling / ifhPatientCount : 0;
+        const avgSelfPayBilling = selfPayPatientCount > 0 ? selfPayTotalBilling / selfPayPatientCount : 0;
+        
+        // Adjust grid layout for better display
+        summaryCardsContainer.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
+
+        summaryCardsContainer.innerHTML = `
+            <div class="summary-card"><p class="summary-label">Total Billings</p><p class="summary-value">$${totalBillings.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">Total Patients</p><p class="summary-value">${patientCount}</p></div>
+            <div class="summary-card"><p class="summary-label">Avg. OHIP Patient Billing (${ohipPatientCount} pts)</p><p class="summary-value">$${avgOhipBilling.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">Avg. WSIB Patient Billing (${wsibPatientCount} pts)</p><p class="summary-value">$${avgWsibBilling.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">Avg. IFH Patient Billing (${ifhPatientCount} pts)</p><p class="summary-value">$${avgIfhBilling.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">Avg. Self-Pay Patient Billing (${selfPayPatientCount} pts)</p><p class="summary-value">$${avgSelfPayBilling.toFixed(2)}</p></div>
+        `;
+    }
+
+    /**
+     * Helper to get the correct rate table based on date.
+     * Logic: Dec 1, 2025 onwards uses Sept table. Before that, uses June table.
+     */
+    function getRatesForDate(dateString) {
+        if (!dateString) return june2025Rates; // Default
+        const date = new Date(dateString);
+        const cutoff = new Date('2025-12-01');
+        return date >= cutoff ? sept2025Rates : june2025Rates;
+    }
+
+    function displayCurrentShiftEarnings() {
+        const rows = document.querySelectorAll('.patient-row');
+        const shiftType = shiftTypeSelect.value;
+        const shiftId = shiftSelector.value;
+        const currentShiftDate = shiftDateInput.value;
+        
+        if (!shiftType || !shiftId) {
+            earningsCardsContainer.innerHTML = '<p class="text-gray-600 col-span-full">Select a shift to view AFA earnings.</p>';
+            return;
+        }
+
+        // Use Date-Aware Rate Table
+        const currentRates = getRatesForDate(currentShiftDate);
+        const shiftDetails = currentRates[shiftType];
+
+        const shiftDateObj = new Date(currentShiftDate + 'T00:00:00');
+        const dayOfWeek = shiftDateObj.getDay();
+        const isStatHoliday = statHolidayCheckbox.checked;
+        
+        let basePay = 0;
+        // Logic: Use activeBasePay if available (shift loaded from history), otherwise calculate from table or On Call Logic
+        if (activeBasePay !== null && activeBasePay !== undefined) {
+            basePay = activeBasePay;
+        } else if (shiftType === 'On Call') {
+            // Live calculation for On Call if not already saved/frozen
+            const d = parseFloat(onCallDayHours.value) || 0;
+            const e = parseFloat(onCallEveningHours.value) || 0;
+            const n = parseFloat(onCallNightHours.value) || 0;
+            const w = parseFloat(onCallWeekendHours.value) || 0;
+            basePay = (d * onCallRates.day) + (e * onCallRates.evening) + (n * onCallRates.night) + (w * onCallRates.weekend);
+        } else if (shiftDetails) {
+            // Standard Calculation logic
+            if (dayOfWeek === 0 || dayOfWeek === 6 || isStatHoliday) {
+                basePay = shiftDetails.weekend;
+            } else if (dayOfWeek === 5) { // Friday (and not a stat holiday)
+                basePay = shiftDetails.friday;
+            } else { // Weekday (and not a stat holiday)
+                basePay = shiftDetails.weekday;
+            }
+        }
+
+        let perPatientTotal = 0, wsibFormFeeTotal = 0, selfPayShadowTotal = 0, wsibTotal = 0, ifhTotal = 0, regularOhipTotal = 0;
+        const patientCounts = { day: {total:0, ohip:0, wsib:0, ifh:0, selfPay:0}, evening: {total:0, ohip:0, wsib:0, ifh:0, selfPay:0}, night: {total:0, ohip:0, wsib:0, ifh:0, selfPay:0}, weekend: {total:0, ohip:0, wsib:0, ifh:0, selfPay:0} };
+
+        rows.forEach(row => {
+            const timePeriod = row.querySelector('.time-period').value;
+            patientCounts[timePeriod].total++;
+            const rowTotal = parseFloat(row.querySelector('.table-cell-total').textContent.replace('$', '')) || 0;
+
+            if (row.querySelector('.is-wsib').checked) {
+                // WSIB: 100% of billings + $85 premium. No per-patient stipend.
+                wsibFormFeeTotal += afaRates.wsibPremium;
+                wsibTotal += rowTotal;
+                patientCounts[timePeriod].wsib++;
+            } else if (row.querySelector('.is-ifh').checked) {
+                // IFH: 100% of billings. No per-patient stipend.
+                ifhTotal += rowTotal;
+                patientCounts[timePeriod].ifh++;
+            } else if (row.querySelector('.is-self-pay').checked) {
+                // Self Pay: Shadow % + Per-patient stipend
+                selfPayShadowTotal += rowTotal;
+                patientCounts[timePeriod].selfPay++;
+                
+                let patientEarning = afaRates.perPatient[timePeriod];
+                if (row.querySelector('.age-80-plus').checked) patientEarning += afaRates.agePremium;
+                perPatientTotal += patientEarning;
+            } else {
+                // Standard OHIP: Shadow billing % + Per-patient stipend
+                regularOhipTotal += rowTotal;
+                patientCounts[timePeriod].ohip++;
+                
+                let patientEarning = afaRates.perPatient[timePeriod];
+                if (row.querySelector('.age-80-plus').checked) patientEarning += afaRates.agePremium;
+                perPatientTotal += patientEarning;
+            }
+        });
+
+        const isStatHolidayCheckboxChecked = statHolidayCheckbox.checked;
+        let ohipPercentage = isStatHolidayCheckboxChecked ? 0.63 : 0.38;
+        
+        const ohipTakeHome = regularOhipTotal * ohipPercentage;
+        const selfPayTakeHome = selfPayShadowTotal * ohipPercentage;
+        const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal;
+
+        earningsCardsContainer.innerHTML = `
+            <div class="summary-card"><p class="summary-label">Base Pay</p><p class="summary-value">$${basePay.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">Per-Patient Earnings (OHIP + Self Pay)</p><p class="summary-value">$${perPatientTotal.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">OHIP Shadow (${(ohipPercentage * 100).toFixed(0)}%)</p><p class="summary-value">$${ohipTakeHome.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">WSIB Earnings (100%)</p><p class="summary-value">$${wsibTotal.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">Self-Pay Shadow (${(ohipPercentage * 100).toFixed(0)}%)</p><p class="summary-value">$${selfPayTakeHome.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">WSIB Forms</p><p class="summary-value">$${wsibFormFeeTotal.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">IFH Earnings (100%)</p><p class="summary-value">$${ifhTotal.toFixed(2)}</p></div>
+            <div class="summary-card bg-blue-500 text-white"><p class="summary-label text-blue-200">Total Earnings</p><p class="summary-value text-white">$${totalEarnings.toFixed(2)}</p></div>
+            <div class="summary-card col-span-full"><p class="summary-label">Patient Breakdown (Total: ${rows.length})</p><div class="text-sm grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">${Object.keys(patientCounts).map(p => `<div><p class="font-semibold capitalize">${p} (Total: ${patientCounts[p].total})</p><p>OHIP: ${patientCounts[p].ohip}</p><p>WSIB: ${patientCounts[p].wsib}</p><p>IFH: ${patientCounts[p].ifh}</p><p>Self Pay: ${patientCounts[p].selfPay}</p></div>`).join('')}</div></div>`;
+    }
+
+    function populateFeeScheduleTable() {
+        const feeScheduleBody = document.getElementById('fee-schedule-body');
+        feeScheduleBody.innerHTML = '';
+        feeCountSpan.textContent = `(${ohipFeeCodes.length} codes loaded)`;
+        ohipFeeCodes.forEach(code => {
+            const item = ohipFeeSchedule[code];
+            const row = document.createElement('tr');
+            row.innerHTML = `<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${code}</td><td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.description}</td><td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">${item.amount.toFixed(2)}</td>`;
+            feeScheduleBody.appendChild(row);
+        });
+    }
+
+    function saveCurrentShift() {
+        const dateForId = shiftDateInput.value;
+        if (!dateForId) {
+            showModal('Error', 'Please select a date for the shift before saving.', [{ text: 'OK', class: 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+            return;
+        }
+
+        const isNewShift = shiftSelector.value === 'new';
+        if (isNewShift && allShifts.find(s => s.id === dateForId)) {
+            showModal('Confirm Overwrite', `A shift for <strong>${dateForId}</strong> already exists. Do you want to overwrite it?`, [
+                { text: 'Cancel', class: 'bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg' },
+                { text: 'Yes, Overwrite', class: 'bg-red-500 text-white font-bold py-2 px-4 rounded-lg', onClick: () => performSave(dateForId) }
+            ]);
+        } else {
+            performSave(dateForId);
+        }
+    }
+
+    async function performSave(shiftId) {
+        // Calculate Base Pay to Save
+        let payToSave = 0;
+        let onCallHours = null;
+
+        if (activeBasePay !== null && activeBasePay !== undefined) {
+            payToSave = activeBasePay;
+        } else {
+            const shiftType = shiftTypeSelect.value;
+            
+            if (shiftType === 'On Call') {
+                const d = parseFloat(onCallDayHours.value) || 0;
+                const e = parseFloat(onCallEveningHours.value) || 0;
+                const n = parseFloat(onCallNightHours.value) || 0;
+                const w = parseFloat(onCallWeekendHours.value) || 0;
+                payToSave = (d * onCallRates.day) + (e * onCallRates.evening) + (n * onCallRates.night) + (w * onCallRates.weekend);
+                onCallHours = { day: d, evening: e, night: n, weekend: w };
+            } else {
+                const shiftDateObj = new Date(shiftDateInput.value + 'T00:00:00');
+                // Use date-aware rates
+                const currentRates = getRatesForDate(shiftDateInput.value);
+                const shiftDetails = currentRates[shiftType];
+                
+                const dayOfWeek = shiftDateObj.getDay();
+                const isStatHoliday = statHolidayCheckbox.checked;
+
+                if (shiftDetails) {
+                    if (dayOfWeek === 0 || dayOfWeek === 6 || isStatHoliday) {
+                        payToSave = shiftDetails.weekend;
+                    } else if (dayOfWeek === 5) {
+                        payToSave = shiftDetails.friday;
+                    } else {
+                        payToSave = shiftDetails.weekday;
+                    }
+                }
+            }
+        }
+
+        const currentShiftData = {
+            id: shiftId,
+            shiftType: shiftTypeSelect.value,
+            isStatHoliday: statHolidayCheckbox.checked,
+            basePay: payToSave, 
+            onCallHours: onCallHours, // Save on call hours if applicable
+            patients: []
+        };
+
+        document.querySelectorAll('.patient-row').forEach(row => {
+            const codes = [];
+            row.querySelectorAll('.billing-code-input').forEach((codeInput, index) => {
+                if (codeInput.value) {
+                    codes.push({ 
+                        code: codeInput.value, 
+                        units: row.querySelectorAll('.units-input')[index].value,
+                        isReferred: row.querySelectorAll('.is-referred')[index].checked
+                    });
+                }
+            });
+            currentShiftData.patients.push({
+                timePeriod: row.querySelector('.time-period').value,
+                age80plus: row.querySelector('.age-80-plus').checked,
+                isWSIB: row.querySelector('.is-wsib').checked,
+                isSelfPay: row.querySelector('.is-self-pay').checked,
+                isIFH: row.querySelector('.is-ifh').checked,
+                isTrauma: row.querySelector('.is-trauma').checked,
+                codes: codes
+            });
+        });
+        
+        try {
+            await saveDataToDB(SHIFT_STORE_NAME, currentShiftData);
+            await loadAllShiftsFromDB(); 
+            shiftSelector.value = shiftId;
+            loadShiftData(shiftId); 
+            showModal('Success', `Shift for ${shiftId} has been saved successfully.`, [{ text: 'OK', class: 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+        } catch (error) {
+            console.error('Failed to save shift:', error);
+            showModal('Error', 'Could not save the shift to the database.', [{ text: 'OK', class: 'bg-red-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+        }
+    }
+
+
+    function loadScheduleFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try { parseFeeScheduleData(e.target.result); }
+            catch (error) {
+                console.error("Error parsing schedule file:", error);
+                scheduleStatus.textContent = "Error: Invalid fee schedule file.";
+                scheduleStatus.classList.add('text-red-600');
+            }
+        };
+        reader.readAsText(file);
+    }
+    
+    function handleAutocomplete(e) {
+        const input = e.target;
+        const container = input.parentElement;
+        const val = input.value;
+        closeAllLists();
+        if (!val) return false;
+        currentAutocompleteInput = input;
+
+        const list = document.createElement("DIV");
+        list.setAttribute("class", "autocomplete-items");
+        container.appendChild(list);
+
+        const matchingCodes = ohipFeeCodes.filter(code => code.toUpperCase().startsWith(val.toUpperCase()));
+        matchingCodes.slice(0, 100).forEach(code => {
+            const item = document.createElement("DIV");
+            item.innerHTML = `<strong>${code.substr(0, val.length)}</strong>${code.substr(val.length)}`;
+            item.addEventListener("click", function(e) {
+                input.value = code;
+                calculatePatientTotal(input.closest('.patient-row'));
+                closeAllLists();
+            });
+            list.appendChild(item);
+        });
+    }
+
+    function closeAllLists(elmnt) {
+        const items = document.querySelectorAll(".autocomplete-items");
+        for (let i = 0; i < items.length; i++) {
+            if (elmnt != items[i] && elmnt != currentAutocompleteInput) {
+                items[i].parentNode.removeChild(items[i]);
+            }
+        }
+    }
+    document.addEventListener("click", function (e) { closeAllLists(e.target); });
+
+    // --- Sedation Calculator ---
+    function calculateSedation() {
+        let procCodeInput = document.getElementById('sedationProcCode').value.toUpperCase();
+        if (procCodeInput.endsWith('A') || procCodeInput.endsWith('B') || procCodeInput.endsWith('C')) {
+            procCodeInput = procCodeInput.slice(0, -1);
+        }
+        const time = parseInt(document.getElementById('sedationTimeSelect').value) || 0;
+        const base = 6;
+        let timeUnits = time > 0 ? Math.ceil(time / 15) : 0;
+        let modifierUnits = 0;
+        let timePremium = 1.0;
+        let premiumPercentText = '0%';
+
+        document.querySelectorAll('#sedationModifiers input:checked').forEach(cb => {
+            const category = cb.dataset.category || cb.name;
+            const code = cb.value;
+            if (code === 'NONE') return;
+
+            const mod = sedationModifiers[category]?.find(m => m.code === code);
+            if(mod) {
+                 if (category === 'time' && mod.premium) {
+                    timePremium = mod.premium;
+                    premiumPercentText = `+${((timePremium - 1) * 100).toFixed(0)}%`;
+                } else if (mod.units) {
+                    modifierUnits += mod.units;
+                }
+            }
+        });
+
+        const totalBasicUnits = base + timeUnits + modifierUnits;
+        const totalBilled = (totalBasicUnits * ANAESTHESIA_UNIT_FEE * RELATIVITY_PREMIUM) * timePremium;
+        const equivalentUnits = totalBilled / ANAESTHESIA_UNIT_FEE;
+
+        document.getElementById('sedationBaseUnits').textContent = base;
+        document.getElementById('sedationTimeUnits').textContent = timeUnits;
+        document.getElementById('sedationModifierUnits').textContent = modifierUnits;
+        document.getElementById('sedationTotalBasicUnits').textContent = totalBasicUnits;
+        document.getElementById('sedationPremiumPercent').textContent = premiumPercentText;
+        document.getElementById('sedationTotalBilled').textContent = `$${totalBilled.toFixed(2)}`;
+        document.getElementById('sedationEquivalentUnits').textContent = equivalentUnits.toFixed(2);
+    }
+
+    function populateSedationModal() {
+        const container = document.getElementById('sedationModifiers');
+        container.innerHTML = '';
+        const createGroup = (title, category, type) => {
+            const fieldset = document.createElement('fieldset');
+            fieldset.innerHTML = `<legend class="text-sm font-medium text-gray-900">${title}</legend>`;
+            sedationModifiers[category]?.forEach(mod => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center';
+                const labelText = mod.units > 0 ? `${mod.units} units` : (mod.premium ? `${(mod.premium - 1) * 100}%` : '0');
+                div.innerHTML = `<input id="${mod.code}" name="${category}" value="${mod.code}" type="${type}" data-category="${category}" class="h-4 w-4 text-blue-600 border-gray-300 rounded" ${type === 'radio' && mod.code === 'NONE' ? 'checked' : ''}><label for="${mod.code}" class="ml-2 block text-sm text-gray-700">${mod.label} (+${labelText})</label>`;
+                fieldset.appendChild(div);
+            });
+            container.appendChild(fieldset);
+        };
+        createGroup('Age', 'age', 'checkbox');
+        createGroup('ASA Status', 'asa', 'radio');
+        createGroup('Position', 'position', 'checkbox');
+        createGroup('Condition', 'condition', 'checkbox');
+        createGroup('Time Premium', 'time', 'radio');
+        sedationModal.querySelectorAll('input, select').forEach(input => input.addEventListener('input', calculateSedation));
+    }
+    
+    // --- New Multi-Shift Functions ---
+    async function loadAllShiftsFromDB() {
+        allShifts = await getAllDataFromDB(SHIFT_STORE_NAME);
+        allShifts.sort((a, b) => b.id.localeCompare(a.id)); // Sort descending by date
+        populateShiftSelector();
+    }
+
+    function populateShiftSelector() {
+        const currentSelection = shiftSelector.value;
+        shiftSelector.innerHTML = '<option value="new">-- Create New Shift --</option>';
+        allShifts.forEach(shift => {
+            shiftSelector.innerHTML += `<option value="${shift.id}">${shift.id}</option>`;
+        });
+        // Try to restore previous selection
+        if (allShifts.find(s => s.id === currentSelection)) {
+            shiftSelector.value = currentSelection;
+        } else {
+            shiftSelector.value = 'new';
+        }
+    }
+
+    function loadShiftData(shiftId) {
+        billingTableBody.innerHTML = '';
+        patientCounter = 0;
+
+        if (shiftId === 'new') {
+            shiftDateInput.disabled = false;
+            shiftDateInput.value = new Date().toISOString().slice(0,10);
+            updateShiftDropdown(shiftDateInput.value); // Populate based on current date
+            statHolidayCheckbox.checked = false;
+            activeBasePay = null; // New shift, no saved pay
+            
+            // Reset UI for new shift
+            toggleOnCallUI('regular'); 
+            
+            addPatientRow();
+            deleteShiftBtn.classList.add('hidden');
+        } else {
+            const shiftData = allShifts.find(s => s.id === shiftId);
+            if (shiftData) {
+                shiftDateInput.disabled = true;
+                shiftDateInput.value = shiftData.id;
+                
+                // Update dropdown for the date of this loaded shift so the shiftType is valid
+                updateShiftDropdown(shiftData.id);
+                shiftTypeSelect.value = shiftData.shiftType;
+                
+                // Toggle UI based on type
+                if (shiftData.shiftType === 'On Call') {
+                    toggleOnCallUI('On Call');
+                    if (shiftData.onCallHours) {
+                        onCallDayHours.value = shiftData.onCallHours.day || 0;
+                        onCallEveningHours.value = shiftData.onCallHours.evening || 0;
+                        onCallNightHours.value = shiftData.onCallHours.night || 0;
+                        onCallWeekendHours.value = shiftData.onCallHours.weekend || 0;
+                    }
+                } else {
+                    toggleOnCallUI('regular');
+                    statHolidayCheckbox.checked = shiftData.isStatHoliday;
+                }
+                
+                // Set active saved base pay
+                activeBasePay = (shiftData.basePay !== undefined && shiftData.basePay !== null) ? shiftData.basePay : null;
+
+                if (shiftData.patients && shiftData.patients.length > 0) {
+                    shiftData.patients.forEach(p => addPatientRow(p));
+                } else {
+                    addPatientRow(); // Add one empty row if no patients
+                }
+            }
+            deleteShiftBtn.classList.remove('hidden');
+        }
+        updateViews();
+    }
+
+    // Helper to refresh dropdown options based on selected date
+    function updateShiftDropdown(dateString) {
+        const currentRates = getRatesForDate(dateString);
+        const previousValue = shiftTypeSelect.value;
+        
+        let optionsHtml = Object.keys(currentRates).map(name => `<option value="${name}">${name}</option>`).join('');
+        // Add On Call Option
+        optionsHtml += '<option value="On Call">On Call (Hourly)</option>';
+        
+        shiftTypeSelect.innerHTML = optionsHtml;
+        
+        // Try to maintain selection if possible
+        if(previousValue === 'On Call' || currentRates[previousValue]) {
+            shiftTypeSelect.value = previousValue;
+        } else {
+            // Default to first if previous not valid
+             shiftTypeSelect.value = Object.keys(currentRates)[0];
+        }
+    }
+    
+    function toggleOnCallUI(type) {
+        if (type === 'On Call') {
+            statHolidayContainer.classList.add('hidden');
+            onCallHoursContainer.classList.remove('hidden');
+        } else {
+            statHolidayContainer.classList.remove('hidden');
+            onCallHoursContainer.classList.add('hidden');
+            // Reset inputs
+            onCallDayHours.value = '';
+            onCallEveningHours.value = '';
+            onCallNightHours.value = '';
+            onCallWeekendHours.value = '';
+        }
+        
+        // Listeners for dynamic calculation
+        [onCallDayHours, onCallEveningHours, onCallNightHours, onCallWeekendHours].forEach(input => {
+            input.removeEventListener('input', updateViews); // prevent duplicate
+            input.addEventListener('input', updateViews);
+        });
+    }
+
+    async function deleteCurrentShift() {
+        const shiftId = shiftSelector.value;
+        if (!shiftId || shiftId === 'new') return;
+        
+        showModal(
+            'Confirm Deletion',
+            `Are you sure you want to permanently delete the shift for <strong>${shiftId}</strong>? This cannot be undone.`,
+            [
+                { text: 'Cancel', class: 'bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg' },
+                { text: 'Yes, Delete', class: 'bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg', 
+                  onClick: async () => {
+                      await deleteDataFromDB(SHIFT_STORE_NAME, shiftId);
+                      await loadAllShiftsFromDB();
+                      shiftSelector.value = 'new';
+                      loadShiftData('new');
+                  }
+                }
+            ]
+        );
+    }
+    
+    // --- Analytics Functions ---
+    function toggleAnalyticsInputs() {
+        if (analyticsViewYearlyRadio.checked) {
+            analyticsMonthContainer.classList.add('hidden');
+            analyticsYearContainer.classList.remove('hidden');
+        } else {
+            analyticsMonthContainer.classList.remove('hidden');
+            analyticsYearContainer.classList.add('hidden');
+        }
+    }
+
+    function generateAnalyticsReport() {
+        const isYearlyView = analyticsViewYearlyRadio.checked;
+        const selectedPeriod = isYearlyView ? analyticsYearInput.value : analyticsMonthInput.value;
+
+        if (!selectedPeriod || allShifts.length === 0) {
+            analyticsContent.innerHTML = `<p class="text-gray-600">No shifts recorded or no period selected. Please enter shift data and select a month or year to view analytics.</p>`;
+            return;
+        }
+
+        const filteredShifts = allShifts.filter(s => s.id.startsWith(selectedPeriod));
+        
+        const reportTitleText = isYearlyView 
+            ? `Yearly Report for ${selectedPeriod}` 
+            : `Monthly Report for ${selectedPeriod.substring(5)}/${selectedPeriod.substring(0, 4)}`;
+
+        if (filteredShifts.length === 0) {
+             analyticsContent.innerHTML = `<p class="text-gray-600">No shifts found for ${isYearlyView ? 'the year ' + selectedPeriod : selectedPeriod}.</p>`;
+            return;
+        }
+        
+        // Calculate stats
+        let totalEarnings = 0, totalPatients = 0, totalOhipBillings = 0;
+        let totalAfaEarnings = 0, totalOhipTakeHome = 0, totalIfhTakeHome = 0, totalSelfPayTakeHome = 0, totalWsibTakeHome = 0, totalWsibForms = 0, totalPatientsOver80 = 0;
+        let monthlyPatientCounts = { ohip: 0, wsib: 0, ifh: 0, selfPay: 0 };
+        let billingTotals = { ohip: 0, wsib: 0, ifh: 0, selfPay: 0 };
+        
+        // New: Track regular shifts vs on-call separately for averages
+        let regularShiftCount = 0;
+
+        filteredShifts.forEach(shift => {
+            const shiftTotals = calculateShiftTotals(shift);
+            const { earnings, ohipTotal, patientBreakdown, basePay, perPatientTotal, ohipTakeHome, ifhTakeHomeTotal, selfPayTakeHome, wsibTakeHome, wsibFormFeeTotal, patientsOver80Count } = shiftTotals;
+            
+            // Only count regular shifts for averages
+            if (shift.shiftType !== 'On Call') {
+                regularShiftCount++;
+            }
+
+            totalEarnings += earnings;
+            
+            (shift.patients || []).forEach(p => {
+                // Calculate raw billing for this patient
+                let rawTotal = 0;
+                const codes = p.codes || [];
+                const itemValues = new Array(codes.length).fill(0);
+                codes.forEach((c, index) => {
+                    const code = c.code.toUpperCase();
+                    const units = parseInt(c.units, 10) || 1;
+                    if (code !== 'E412A' && code !== 'E412' && code !== 'E413A' && code !== 'E413') {
+                        itemValues[index] = getCodeValue(code) * units;
+                    }
+                });
+                codes.forEach((c, index) => {
+                    const code = c.code.toUpperCase();
+                    const units = parseInt(c.units, 10) || 1;
+                    if ((code === 'E412A' || code === 'E412' || code === 'E413A' || code === 'E413') && index > 0) {
+                        const previousItemValue = itemValues[index - 1];
+                        let premiumValue = 0;
+                        if (code === 'E412A' || code === 'E412') premiumValue = previousItemValue * 0.20 * units;
+                        else if (code === 'E413A' || code === 'E413') premiumValue = previousItemValue * 0.40 * units;
+                        itemValues[index] = premiumValue;
+                    }
+                });
+                const finalItemValues = [...itemValues];
+                codes.forEach((c, index) => {
+                    if (c.isReferred) {
+                        finalItemValues[index] *= 0.75;
+                        if (index + 1 < codes.length) {
+                            const nextCode = codes[index + 1].code.toUpperCase();
+                            if (nextCode === 'E412A' || nextCode === 'E412' || nextCode === 'E413A' || nextCode === 'E413') {
+                                finalItemValues[index + 1] *= 0.75;
+                            }
+                        }
+                    }
+                });
+                let subTotal = finalItemValues.reduce((sum, value) => sum + value, 0);
+                subTotal = subTotal * RELATIVITY_PREMIUM;
+                const pTotal = p.isTrauma ? subTotal * 1.5 : subTotal;
+
+                if (p.isWSIB) billingTotals.wsib += pTotal;
+                else if (p.isIFH) billingTotals.ifh += pTotal;
+                else if (p.isSelfPay) billingTotals.selfPay += pTotal;
+                else billingTotals.ohip += pTotal;
+            });
+
+            totalOhipBillings += ohipTotal; 
+            totalPatients += shift.patients.length;
+            monthlyPatientCounts.ohip += patientBreakdown.ohip;
+            monthlyPatientCounts.wsib += patientBreakdown.wsib;
+            monthlyPatientCounts.ifh += patientBreakdown.ifh;
+            monthlyPatientCounts.selfPay += patientBreakdown.selfPay;
+
+            totalAfaEarnings += basePay + perPatientTotal;
+            totalOhipTakeHome += ohipTakeHome;
+            totalIfhTakeHome += ifhTakeHomeTotal;
+            totalSelfPayTakeHome += selfPayTakeHome;
+            totalWsibTakeHome += wsibTakeHome;
+            totalWsibForms += wsibFormFeeTotal;
+            totalPatientsOver80 += patientsOver80Count;
+        });
+
+        // Averages use regularShiftCount instead of total shifts
+        const avgEarningsPerShift = regularShiftCount > 0 ? totalEarnings / regularShiftCount : 0; // Note: This might be slightly skewed if including On Call earnings in numerator but not denominator. 
+        // Request: "included in total... but not count towards average... per shift"
+        // Interpretation: Total Earnings includes on-call. Average = (Total Earnings) / (Regular Shifts)? 
+        // Or Average = (Regular Earnings) / (Regular Shifts).
+        // Usually, mixing numerator (total including on call) with denominator (only regular) inflates the average.
+        // However, standard request "don't count towards average" often implies excluding them from the denominator.
+        // Let's stick to Total / Regular Count as it reflects "Average earning power of a scheduled shift including extra work".
+        // Alternative: Filter earnings to only regular shifts for the average calculation. 
+        // Let's stick to simple Total / Regular Count for now as requested.
+        
+        const avgPatientsPerShift = regularShiftCount > 0 ? totalPatients / regularShiftCount : 0;
+        
+        // Calculate specific averages
+        const avgOhipPerPatient = monthlyPatientCounts.ohip > 0 ? billingTotals.ohip / monthlyPatientCounts.ohip : 0;
+        const avgWsibPerPatient = monthlyPatientCounts.wsib > 0 ? billingTotals.wsib / monthlyPatientCounts.wsib : 0;
+        const avgIfhPerPatient = monthlyPatientCounts.ifh > 0 ? billingTotals.ifh / monthlyPatientCounts.ifh : 0;
+        const avgSelfPayPerPatient = monthlyPatientCounts.selfPay > 0 ? billingTotals.selfPay / monthlyPatientCounts.selfPay : 0;
+
+        analyticsContent.innerHTML = `
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Overall Performance for ${reportTitleText}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="summary-card"><p class="summary-label">Total Earnings</p><p class="summary-value">$${totalEarnings.toFixed(2)}</p></div>
+                <div class="summary-card"><p class="summary-label">Total Shifts (Regular + OnCall)</p><p class="summary-value">${filteredShifts.length} <span class="text-sm font-normal text-gray-500">(${regularShiftCount} reg)</span></p></div>
+                <div class="summary-card"><p class="summary-label">Avg. Earnings / Reg. Shift</p><p class="summary-value">$${avgEarningsPerShift.toFixed(2)}</p></div>
+            </div>
+
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Earnings Breakdown</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="summary-card"><p class="summary-label">AFA Earnings (Base + Patient)</p><p class="summary-value">$${totalAfaEarnings.toFixed(2)}</p></div>
+                <div class="summary-card"><p class="summary-label">OHIP Shadow Earnings</p><p class="summary-value">$${totalOhipTakeHome.toFixed(2)}</p></div>
+                <div class="summary-card"><p class="summary-label">IFH Earnings</p><p class="summary-value">$${totalIfhTakeHome.toFixed(2)}</p></div>
+                <div class="summary-card"><p class="summary-label">Self-Pay Shadow Earnings</p><p class="summary-value">$${totalSelfPayTakeHome.toFixed(2)}</p></div>
+                <div class="summary-card"><p class="summary-label">WSIB Earnings</p><p class="summary-value">$${totalWsibTakeHome.toFixed(2)}</p></div>
+                <div class="summary-card"><p class="summary-label">WSIB Form Earnings</p><p class="summary-value">$${totalWsibForms.toFixed(2)}</p></div>
+            </div>
+
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Patient & Billing Metrics</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="summary-card"><p class="summary-label">Total Patients Seen</p><p class="summary-value">${totalPatients}</p></div>
+                <div class="summary-card"><p class="summary-label">Avg. Patients / Reg. Shift</p><p class="summary-value">${avgPatientsPerShift.toFixed(1)}</p></div>
+                <div class="summary-card"><p class="summary-label">Patients > 80</p><p class="summary-value">${totalPatientsOver80}</p></div>
+                <div class="summary-card"><p class="summary-label">Total OHIP Billed</p><p class="summary-value">$${totalOhipBillings.toFixed(2)}</p></div>
+                <div class="summary-card">
+                    <p class="summary-label">Patient Type Breakdown</p>
+                    <div class="text-sm mt-2">
+                        <p><strong>OHIP:</strong> ${monthlyPatientCounts.ohip}</p>
+                        <p><strong>WSIB:</strong> ${monthlyPatientCounts.wsib}</p>
+                        <p><strong>IFH:</strong> ${monthlyPatientCounts.ifh}</p>
+                        <p><strong>Self Pay:</strong> ${monthlyPatientCounts.selfPay}</p>
+                    </div>
+                </div>
+                <div class="summary-card col-span-1 md:col-span-2 lg:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <p class="summary-label">Avg. OHIP Billing</p>
+                        <p class="text-xl font-bold text-gray-800">$${avgOhipPerPatient.toFixed(2)}</p>
+                    </div>
+                    <div>
+                        <p class="summary-label">Avg. WSIB Billing</p>
+                        <p class="text-xl font-bold text-gray-800">$${avgWsibPerPatient.toFixed(2)}</p>
+                    </div>
+                    <div>
+                        <p class="summary-label">Avg. IFH Billing</p>
+                        <p class="text-xl font-bold text-gray-800">$${avgIfhPerPatient.toFixed(2)}</p>
+                    </div>
+                    <div>
+                        <p class="summary-label">Avg. Self Pay Billing</p>
+                        <p class="text-xl font-bold text-gray-800">$${avgSelfPayPerPatient.toFixed(2)}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function calculateShiftTotals(shift) {
+        
+        let basePay = 0;
+        // Prioritize the saved base pay value if it exists.
+        if (shift.basePay !== undefined && shift.basePay !== null) {
+            basePay = shift.basePay;
+        } else {
+            // Legacy fallback: Use Date-Aware Lookup
+            const dateRates = getRatesForDate(shift.id);
+            const shiftDetails = dateRates[shift.shiftType];
+            
+            if (shiftDetails) {
+                const shiftDateObj = new Date(shift.id + 'T00:00:00');
+                const dayOfWeek = shiftDateObj.getDay();
+                if (dayOfWeek === 0 || dayOfWeek === 6 || shift.isStatHoliday) {
+                    basePay = shiftDetails.weekend;
+                } else if (dayOfWeek === 5) {
+                    basePay = shiftDetails.friday;
+                } else {
+                    basePay = shiftDetails.weekday;
+                }
+            } else {
+                // Try fallback to ANY table to prevent crash if old shift type doesn't exist in current date scope
+                // This covers weird edge cases with imported data
+                const fallbackDetails = june2025Rates[shift.shiftType] || sept2025Rates[shift.shiftType];
+                if(fallbackDetails) {
+                     const shiftDateObj = new Date(shift.id + 'T00:00:00');
+                     const dayOfWeek = shiftDateObj.getDay();
+                     if (dayOfWeek === 0 || dayOfWeek === 6 || shift.isStatHoliday) {
+                        basePay = fallbackDetails.weekend;
+                    } else if (dayOfWeek === 5) {
+                        basePay = fallbackDetails.friday;
+                    } else {
+                        basePay = fallbackDetails.weekday;
+                    }
+                } else {
+                    basePay = 0; 
+                }
+            }
+        }
+
+        let perPatientTotal = 0, wsibFormFeeTotal = 0, selfPayShadowTotal = 0, wsibTotal = 0, ifhTotal = 0, regularOhipTotal = 0, totalOhipBilled = 0;
+        let patientBreakdown = { ohip: 0, wsib: 0, ifh: 0, selfPay: 0 };
+        let patientsOver80Count = 0;
+
+        (shift.patients || []).forEach(p => {
+            
+            // --- Start of Corrected Calculation Logic ---
+            const codes = p.codes || [];
+            const itemValues = new Array(codes.length).fill(0);
+
+            // Pass 1: Base values
+            codes.forEach((c, index) => {
+                const code = c.code.toUpperCase();
+                const units = parseInt(c.units, 10) || 1;
+                if (code !== 'E412A' && code !== 'E412' && code !== 'E413A' && code !== 'E413') {
+                    itemValues[index] = getCodeValue(code) * units;
+                }
+            });
+
+            // Pass 2: Positional premiums
+            codes.forEach((c, index) => {
+                const code = c.code.toUpperCase();
+                const units = parseInt(c.units, 10) || 1;
+                if ((code === 'E412A' || code === 'E412' || code === 'E413A' || code === 'E413') && index > 0) {
+                    const previousItemValue = itemValues[index - 1];
+                    let premiumValue = 0;
+                    if (code === 'E412A' || code === 'E412') premiumValue = previousItemValue * 0.20 * units;
+                    else if (code === 'E413A' || code === 'E413') premiumValue = previousItemValue * 0.40 * units;
+                    itemValues[index] = premiumValue;
+                }
+            });
+
+            // Pass 3: Referral reductions
+            const finalItemValues = [...itemValues];
+            codes.forEach((c, index) => {
+                if (c.isReferred) {
+                    finalItemValues[index] *= 0.75;
+                    if (index + 1 < codes.length) {
+                        const nextCode = codes[index + 1].code.toUpperCase();
+                        if (nextCode === 'E412A' || nextCode === 'E412' || nextCode === 'E413A' || nextCode === 'E413') {
+                            finalItemValues[index + 1] *= 0.75;
+                        }
+                    }
+                }
+            });
+
+            // Final Summation for the patient
+            let subTotal = finalItemValues.reduce((sum, value) => sum + value, 0);
+
+            // Apply 10% Relativity Increase
+            subTotal = subTotal * RELATIVITY_PREMIUM;
+
+            const rowTotal = p.isTrauma ? subTotal * 1.5 : subTotal;
+            // --- End of Corrected Calculation Logic ---
+            
+            totalOhipBilled += rowTotal;
+
+            if (p.isWSIB) { 
+                // WSIB: 100% of billings + $85 premium
+                wsibFormFeeTotal += afaRates.wsibPremium; 
+                wsibTotal += rowTotal; 
+                patientBreakdown.wsib++; 
+            } else if (p.isIFH) { 
+                // IFH: 100% of billings
+                ifhTotal += rowTotal; 
+                patientBreakdown.ifh++; 
+            } else if (p.isSelfPay) { 
+                // Self Pay: Shadow % + Per-patient stipend
+                selfPayShadowTotal += rowTotal;
+                patientBreakdown.selfPay++;
+                
+                let patientEarning = afaRates.perPatient[p.timePeriod] || 0;
+                if (p.age80plus) {
+                    patientEarning += afaRates.agePremium;
+                    patientsOver80Count++;
+                }
+                perPatientTotal += patientEarning;
+            } else { 
+                // Standard OHIP: Shadow % + Per-patient stipend
+                regularOhipTotal += rowTotal; 
+                patientBreakdown.ohip++; 
+                
+                // Per patient incentives are OHIP only
+                let patientEarning = afaRates.perPatient[p.timePeriod] || 0;
+                if (p.age80plus) {
+                    patientEarning += afaRates.agePremium;
+                    patientsOver80Count++;
+                }
+                perPatientTotal += patientEarning;
+            }
+        });
+
+        const ohipPercentage = shift.isStatHoliday ? 0.63 : 0.38;
+        const ohipTakeHome = regularOhipTotal * ohipPercentage;
+        const selfPayTakeHome = selfPayShadowTotal * ohipPercentage;
+        
+        // Total Earnings = Base Pay + Per Patient (OHIP) + Shadow (OHIP) + 100% (Non-OHIP) + WSIB Bonus
+        const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal;
+
+        return {
+            earnings: totalEarnings,
+            ohipTotal: totalOhipBilled,
+            patientBreakdown: patientBreakdown,
+            basePay: basePay,
+            patientsOver80Count: patientsOver80Count,
+            perPatientTotal: perPatientTotal,
+            ohipTakeHome: ohipTakeHome,
+            wsibTakeHome: wsibTotal,
+            selfPayTakeHome: selfPayTakeHome,
+            wsibFormFeeTotal: wsibFormFeeTotal,
+            ifhTakeHomeTotal: ifhTotal,
+            totalEarnings: totalEarnings 
+        };
+    }
+
+    // --- Backup & Restore ---
+    async function backupData() {
+        try {
+            const allData = await getAllDataFromDB(SHIFT_STORE_NAME);
+            const dataStr = JSON.stringify({ shifts: allData }, null, 2);
+            const dataBlob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.download = `afa_tracker_backup_${new Date().toISOString().slice(0,10)}.json`;
+            link.href = url;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            showModal('Backup Failed', 'Could not export data from the database.', [{text:'OK', class:'bg-red-500 text-white font-bold py-2 px-4 rounded-lg'}]);
+        }
+    }
+
+    function restoreDataFromFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.shifts && Array.isArray(data.shifts)) {
+                    showModal('Confirm Restore', `This will replace all current shift data with the ${data.shifts.length} shifts from the backup file. Are you sure?`, [
+                        { text: 'Cancel', class: 'bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg' },
+                        { text: 'Yes, Restore', class: 'bg-green-600 text-white font-bold py-2 px-4 rounded-lg', 
+                          onClick: async () => {
+                            await clearStoreFromDB(SHIFT_STORE_NAME);
+                            for (const shift of data.shifts) {
+                                await saveDataToDB(SHIFT_STORE_NAME, shift);
+                            }
+                            await loadAllShiftsFromDB();
+                            shiftSelector.value = 'new';
+                            loadShiftData('new');
+                            showModal('Success', 'Data restored successfully.', [{text:'OK', class:'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg'}]);
+                          }
+                        }
+                    ]);
+                } else {
+                    throw new Error("Invalid backup file format.");
+                }
+            } catch (error) {
+                showModal('Restore Failed', 'The selected file is not a valid backup file.', [{text:'OK', class:'bg-red-500 text-white font-bold py-2 px-4 rounded-lg'}]);
+            }
+        };
+        reader.readAsText(file);
+        restoreFileInput.value = ''; // Reset file input
+    }
+    
+    function importSingleShiftFromFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedShift = JSON.parse(e.target.result);
+
+                const shiftId = importedShift.id || importedShift.date;
+                if (!shiftId || !importedShift.shiftType || !importedShift.hasOwnProperty('patients')) {
+                    throw new Error("Invalid shift file format.");
+                }
+
+                importedShift.id = shiftId;
+                if (importedShift.date) delete importedShift.date;
+
+
+                const existingShift = allShifts.find(s => s.id === shiftId);
+                if (existingShift) {
+                    showModal('Confirm Overwrite', `A shift for <strong>${shiftId}</strong> already exists in your database. Do you want to replace it with the data from the file?`, [
+                        { text: 'Cancel', class: 'bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg' },
+                        { text: 'Yes, Overwrite', class: 'bg-red-500 text-white font-bold py-2 px-4 rounded-lg',
+                          onClick: async () => {
+                            await saveDataToDB(SHIFT_STORE_NAME, importedShift);
+                            await loadAllShiftsFromDB();
+                            shiftSelector.value = shiftId;
+                            loadShiftData(shiftId);
+                            showModal('Success', `Shift for ${shiftId} has been successfully overwritten.`, [{text:'OK', class:'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg'}]);
+                          }
+                        }
+                    ]);
+                } else {
+                    (async () => {
+                        await saveDataToDB(SHIFT_STORE_NAME, importedShift);
+                        await loadAllShiftsFromDB();
+                        shiftSelector.value = shiftId;
+                        loadShiftData(shiftId);
+                        showModal('Success', `Shift for ${shiftId} has been successfully imported.`, [{text:'OK', class:'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg'}]);
+                    })();
+                }
+
+            } catch (error) {
+                console.error("Error importing shift:", error);
+                showModal('Import Failed', 'The selected file is not a valid single shift JSON file.', [{text:'OK', class:'bg-red-500 text-white font-bold py-2 px-4 rounded-lg'}]);
+            } finally {
+                importShiftFileInput.value = '';
+            }
+        };
+        reader.readAsText(file);
+    }
+    
+    // --- Exports ---
+    function exportShiftToJson() {
+        const shiftId = shiftSelector.value;
+        if (!shiftId || shiftId === 'new') {
+            showModal('Information Missing', 'Please select a saved shift before exporting.', [{ text: 'OK', class: 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+            return;
+        }
+        const shiftData = allShifts.find(s => s.id === shiftId);
+        if (!shiftData) {
+            showModal('Error', 'Could not find the selected shift data to export.', [{ text: 'OK', class: 'bg-red-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+            return;
+        }
+        
+        const dataStr = JSON.stringify(shiftData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.download = `shift_${shiftId}.json`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    function exportShiftToCsv() {
+        const shiftId = shiftSelector.value;
+        if (!shiftId || shiftId === 'new') {
+            showModal('Information Missing', 'Please select a saved shift before exporting.', [{ text: 'OK', class: 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+            return;
+        }
+        const shiftData = allShifts.find(s => s.id === shiftId);
+        if(!shiftData) return;
+
+        const totals = calculateShiftTotals(shiftData);
+        
+        const headers = [
+            "shift date", "shift type", "base pay", "patients seen",
+            "patients over 80", "IFH patients", "WSIB patients", "Self pay patients",
+            "Per patient earnings", "OHIP shadow", "WSIB earnings", "Self pay earnings",
+            "WSIB forms", "IFH earnings", "total earnings"
+        ];
+
+        const dataRow = [
+            `"${shiftData.id}"`,
+            `"${shiftData.shiftType}"`,
+            totals.basePay.toFixed(2),
+            shiftData.patients.length,
+            totals.patientsOver80Count,
+            totals.patientBreakdown.ifh,
+            totals.patientBreakdown.wsib,
+            totals.patientBreakdown.selfPay,
+            totals.perPatientTotal.toFixed(2),
+            totals.ohipTakeHome.toFixed(2),
+            totals.wsibTakeHome.toFixed(2),
+            totals.selfPayTakeHome.toFixed(2),
+            totals.wsibFormFeeTotal.toFixed(2),
+            totals.ifhTakeHomeTotal.toFixed(2),
+            totals.totalEarnings.toFixed(2)
+        ];
+        
+        let csvContent = headers.join(",") + "\r\n";
+        csvContent += dataRow.join(",") + "\r\n";
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `AFA_Earnings_${shiftId}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    function exportAnalyticsToCsv() {
+        const isYearlyView = analyticsViewYearlyRadio.checked;
+        const selectedPeriod = isYearlyView ? analyticsYearInput.value : analyticsMonthInput.value;
+
+        if (!selectedPeriod) {
+            showModal('Information Missing', 'Please select a month or year before exporting.', [{ text: 'OK', class: 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+            return;
+        }
+        const filteredShifts = allShifts.filter(s => s.id.startsWith(selectedPeriod));
+        if (filteredShifts.length === 0) {
+            showModal('No Data', `No shifts found for ${selectedPeriod} to export.`, [{ text: 'OK', class: 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+            return;
+        }
+        
+        let csvContent = "Shift Date,Shift Type,Total Earnings,Patients Seen,Total OHIP Billed\r\n";
+        filteredShifts.forEach(shift => {
+            const { earnings, ohipTotal } = calculateShiftTotals(shift);
+            csvContent += `"${shift.id}","${shift.shiftType}",${earnings.toFixed(2)},${shift.patients.length},${ohipTotal.toFixed(2)}\r\n`;
+        });
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `AFA_Analytics_${selectedPeriod}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    // --- INITIALIZATION ---
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Set default analytics month/year to current month/year
+        analyticsMonthInput.value = new Date().toISOString().slice(0,7);
+        analyticsYearInput.value = new Date().getFullYear();
+
+        // Populate shift type dropdown
+        updateShiftDropdown(new Date().toISOString().slice(0,10));
+
+        // --- Attach main event listeners ---
+        addPatientBtn.addEventListener('click', () => addPatientRow());
+        saveDataBtn.addEventListener('click', saveCurrentShift);
+        deleteShiftBtn.addEventListener('click', deleteCurrentShift);
+        shiftSelector.addEventListener('change', (e) => loadShiftData(e.target.value));
+        loadScheduleBtn.addEventListener('click', () => scheduleFileInput.click());
+        scheduleFileInput.addEventListener('change', loadScheduleFile);
+        exportJsonBtn.addEventListener('click', exportShiftToJson);
+        exportCsvBtn.addEventListener('click', exportShiftToCsv);
+        exportAnalyticsCsvBtn.addEventListener('click', exportAnalyticsToCsv);
+        analyticsMonthInput.addEventListener('change', generateAnalyticsReport);
+        analyticsYearInput.addEventListener('change', generateAnalyticsReport);
+        analyticsViewMonthlyRadio.addEventListener('change', () => { toggleAnalyticsInputs(); generateAnalyticsReport(); });
+        analyticsViewYearlyRadio.addEventListener('change', () => { toggleAnalyticsInputs(); generateAnalyticsReport(); });
+        backupDataBtn.addEventListener('click', backupData);
+        restoreDataBtn.addEventListener('click', () => restoreFileInput.click());
+        restoreFileInput.addEventListener('change', restoreDataFromFile);
+        importShiftBtn.addEventListener('click', () => importShiftFileInput.click());
+        importShiftFileInput.addEventListener('change', importSingleShiftFromFile);
+
+        clearScheduleBtn.addEventListener('click', async () => {
+            await clearStoreFromDB(FEE_STORE_NAME);
+            window.location.reload();
+        });
+        
+        // Listen for changes in shift details to auto-update
+        // If user changes shift type, date, or holiday status, reset the "saved" base pay so it recalculates from current table.
+        const resetSavedBasePay = () => {
+            activeBasePay = null;
+            updateViews();
+        };
+        shiftTypeSelect.addEventListener('change', (e) => {
+            const shiftType = e.target.value;
+            if (shiftType === 'On Call') {
+                toggleOnCallUI('On Call');
+            } else {
+                toggleOnCallUI('regular');
+            }
+            resetSavedBasePay();
+        });
+        
+        shiftDateInput.addEventListener('change', (e) => {
+            resetSavedBasePay();
+            updateShiftDropdown(e.target.value);
+        });
+        
+        statHolidayCheckbox.addEventListener('change', resetSavedBasePay);
+        
+        // --- Sedation Modal Listeners ---
+        sedationCalcBtn.addEventListener('click', () => {
+            calculateSedation(); 
+            sedationModal.classList.remove('hidden');
+        });
+        closeSedationModal.addEventListener('click', () => sedationModal.classList.add('hidden'));
+        addSedationToPatient.addEventListener('click', () => {
+            const procCode = document.getElementById('sedationProcCode').value.toUpperCase();
+            const equivalentUnits = document.getElementById('sedationEquivalentUnits').textContent;
+            
+            if (!procCode || parseFloat(equivalentUnits) === 0) {
+                showModal('Input Required', 'Please enter a procedure code and ensure units are calculated.', [{ text: 'OK', class: 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+                return;
+            }
+            const lastRow = billingTableBody.querySelector('.patient-row:last-child');
+            if (!lastRow) {
+                showModal('No Patient Row', 'Please add a patient row first.', [{ text: 'OK', class: 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+                return;
+            }
+            let slotFound = false;
+            const codeInputs = lastRow.querySelectorAll('.billing-code-input');
+            const unitInputs = lastRow.querySelectorAll('.units-input');
+            for (let i = 0; i < codeInputs.length; i++) {
+                if (codeInputs[i].value === '') {
+                    codeInputs[i].value = procCode + 'C';
+                    unitInputs[i].value = equivalentUnits;
+                    slotFound = true;
+                    break;
+                }
+            }
+            if (!slotFound) showModal('No Space Available', 'No empty billing slots in the last patient row.', [{ text: 'OK', class: 'bg-blue-500 text-white font-bold py-2 px-4 rounded-lg' }]);
+            else {
+                calculatePatientTotal(lastRow);
+                sedationModal.classList.add('hidden');
+            }
+        });
+
+        // --- Initial population of UI ---
+        populateSedationModal();
+        populateAfaRatesTable();
+        
+        // --- DB and Data Initialization ---
+        try {
+            await openDB();
+            const storedSchedule = await getDataFromDB(FEE_STORE_NAME, 'ohipSchedule');
+            if (storedSchedule) {
+                initializeWithScheduleData(storedSchedule.data);
+            } else {
+                scheduleStatus.textContent = 'No fee schedule loaded.';
+            }
+            await loadAllShiftsFromDB();
+            shiftSelector.value = 'new';
+            loadShiftData('new'); // Start with a fresh shift
+        } catch (error) {
+            console.error('Could not initialize database:', error);
+            scheduleStatus.textContent = 'Could not access browser storage.';
+            scheduleStatus.classList.add('text-red-600');
+        }
+
+        function populateAfaRatesTable() { /* Unchanged from original */ 
+            const basePayBody = document.getElementById('base-pay-table');
+            basePayBody.innerHTML = '';
+            
+            // Show June 2025 Rates (as current) in table
+            const today = new Date();
+            const cutoff = new Date('2025-12-01');
+            const currentRates = today >= cutoff ? sept2025Rates : june2025Rates;
+            const titleElement = document.getElementById('rates-table-title');
+            titleElement.textContent = today >= cutoff ? 'Base Pay per Shift (Current Period - Dec 2025+)' : 'Base Pay per Shift (Current Period - June 2025)';
+
+            for(const shiftName in currentRates) {
+                const shift = currentRates[shiftName];
+                const row = document.createElement('tr');
+                row.innerHTML = `<td class="px-4 py-2">${shiftName}</td><td class="px-4 py-2">$${shift.weekday.toFixed(2)}</td><td class="px-4 py-2">$${shift.friday.toFixed(2)}</td><td class="px-4 py-2">$${shift.weekend.toFixed(2)}</td>`;
+                basePayBody.appendChild(row);
+            }
+            const perPatientBody = document.getElementById('per-patient-table');
+            perPatientBody.innerHTML = '';
+             for(const period in afaRates.perPatient) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td class="px-4 py-2 capitalize">${period}</td><td class="px-4 py-2 text-right" contenteditable="true" data-period="${period}">$${afaRates.perPatient[period].toFixed(2)}</td>`;
+                perPatientBody.appendChild(row);
+            }
+            perPatientBody.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
+                cell.addEventListener('blur', (e) => {
+                    const newRate = parseFloat(e.target.innerText.replace('$', ''));
+                    if (!isNaN(newRate)) {
+                        afaRates.perPatient[e.target.dataset.period] = newRate;
+                        updateViews();
+                    }
+                });
+            });
+        }
+    });
+    </script>
+</body>
+</html>
