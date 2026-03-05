@@ -731,6 +731,31 @@ const sept2025Rates = {
     'Shift 20 - Overnight - 23:59': { weekday: 1240, friday: 1610, weekend: 1610, startTime: '23:59' }
 };
 
+// FEB 2026 RATES (effective Feb 1, 2026)
+// Change from Sept 2025: Shift 16 - 20:00 increased (weekday +$200, Fri/Weekend +$260)
+const feb2026Rates = {
+    'Shift 1 - Casino - 04:00': { weekday: 980, friday: 980, weekend: 1270, startTime: '04:00' },
+    'Shift 2 - Ozone - 05:00': { weekday: 820, friday: 820, weekend: 1070, startTime: '05:00' },
+    'Shift 3 - 07:00': { weekday: 650, friday: 650, weekend: 850, startTime: '07:00' },
+    'Shift 4 - Ozone - 08:00': { weekday: 610, friday: 640, weekend: 790, startTime: '08:00' },
+    'Shift 5 - 09:00': { weekday: 600, friday: 630, weekend: 780, startTime: '09:00' },
+    'Shift 6 - Ozone - 10:00': { weekday: 620, friday: 670, weekend: 810, startTime: '10:00' },
+    'Shift 7 - 11:00': { weekday: 620, friday: 700, weekend: 810, startTime: '11:00' },
+    'Shift 8 - 13:00': { weekday: 640, friday: 780, weekend: 830, startTime: '13:00' },
+    'Shift 9 - Ozone - 13:00': { weekday: 640, friday: 780, weekend: 830, startTime: '13:00' },
+    'Shift 10 - Ozone - 15:00': { weekday: 700, friday: 910, weekend: 910, startTime: '15:00' },
+    'Shift 11 - 15:00': { weekday: 700, friday: 910, weekend: 910, startTime: '15:00' },
+    'Shift 12 - Ozone - 17:00': { weekday: 670, friday: 870, weekend: 870, startTime: '17:00' },
+    'Shift 13 - 17:00': { weekday: 670, friday: 870, weekend: 870, startTime: '17:00' },
+    'Shift 14 - 19:00': { weekday: 780, friday: 1010, weekend: 1010, startTime: '19:00' },
+    'Shift 15 - Ozone - 19:00': { weekday: 780, friday: 1010, weekend: 1010, startTime: '19:00' },
+    'Shift 16 - 20:00': { weekday: 1080, friday: 1400, weekend: 1400, startTime: '20:00' },
+    'Shift 17 - Ozone - 21:00': { weekday: 950, friday: 1240, weekend: 1240, startTime: '21:00' },
+    'Shift 18 - Casino - 22:00': { weekday: 1070, friday: 1390, weekend: 1390, startTime: '22:00' },
+    'Shift 19 - Casino - 23:00': { weekday: 1120, friday: 1460, weekend: 1460, startTime: '23:00' },
+    'Shift 20 - Overnight - 23:59': { weekday: 1240, friday: 1610, weekend: 1610, startTime: '23:59' }
+};
+
 const afaRates = {
     perPatient: { day: 32.18, evening: 38.30, night: 59.54, weekend: 51.49 },
     agePremium: 15, wsibPremium: 85
@@ -1106,13 +1131,16 @@ function displayCurrentShiftSummary() {
 
 /**
  * Helper to get the correct rate table based on date.
- * Logic: Dec 1, 2025 onwards uses Sept table. Before that, uses June table.
+ * - Before Dec 1, 2025:  june2025Rates
+ * - Dec 1, 2025 – Jan 31, 2026: sept2025Rates
+ * - Feb 1, 2026 onwards: feb2026Rates
  */
 function getRatesForDate(dateString) {
-    if (!dateString) return june2025Rates; // Default
+    if (!dateString) return feb2026Rates; // Default to most current
     const date = new Date(dateString);
-    const cutoff = new Date('2025-12-01');
-    return date >= cutoff ? sept2025Rates : june2025Rates;
+    if (date >= new Date('2026-02-01')) return feb2026Rates;
+    if (date >= new Date('2025-12-01')) return sept2025Rates;
+    return june2025Rates;
 }
 
 function displayCurrentShiftEarnings() {
@@ -1898,7 +1926,7 @@ function calculateShiftTotals(shift) {
             }
         } else {
             // Try fallback to ANY table to prevent crash if old shift type doesn't exist in current date scope
-            const fallbackDetails = june2025Rates[shift.shiftType] || sept2025Rates[shift.shiftType];
+            const fallbackDetails = feb2026Rates[shift.shiftType] || sept2025Rates[shift.shiftType] || june2025Rates[shift.shiftType];
             if(fallbackDetails) {
                  const shiftDateObj = new Date(shift.id + 'T00:00:00');
                  const dayOfWeek = shiftDateObj.getDay();
@@ -2358,12 +2386,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         const basePayBody = document.getElementById('base-pay-table');
         basePayBody.innerHTML = '';
 
-        // Show June 2025 Rates (as current) in table
-        const today = new Date();
-        const cutoff = new Date('2025-12-01');
-        const currentRates = today >= cutoff ? sept2025Rates : june2025Rates;
+        // Show the currently-applicable rate table
+        const currentRates = getRatesForDate(new Date().toISOString().slice(0, 10));
         const titleElement = document.getElementById('rates-table-title');
-        titleElement.textContent = today >= cutoff ? 'Base Pay per Shift (Current Period - Dec 2025+)' : 'Base Pay per Shift (Current Period - June 2025)';
+        const today = new Date();
+        let rateLabel = 'June 2025';
+        if (today >= new Date('2026-02-01')) rateLabel = 'Feb 2026';
+        else if (today >= new Date('2025-12-01')) rateLabel = 'Dec 2025';
+        titleElement.textContent = `Base Pay per Shift (Current: ${rateLabel})`;
 
         for(const shiftName in currentRates) {
             const shift = currentRates[shiftName];
