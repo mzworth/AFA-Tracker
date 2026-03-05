@@ -121,6 +121,11 @@ body {
     background-color: #e9e9e9;
 }
 
+.autocomplete-active {
+    background-color: #3b82f6 !important;
+    color: white;
+}
+
 /* Modal Styles */
 .modal-overlay {
     position: fixed;
@@ -772,6 +777,7 @@ const onCallRates = {
 // --- STATE ---
 let patientCounter = 0;
 let currentAutocompleteInput = null;
+let currentFocus = -1; // Tracks highlighted item in autocomplete list
 let allShifts = []; // Local cache of all shifts from the DB
 let activeBasePay = null; // Stores saved base pay for currently loaded shift
 
@@ -1055,13 +1061,14 @@ function addPatientRow(data = null) {
         <td class="p-2 text-center"><button class="text-red-500 hover:text-red-700 remove-btn font-bold text-xl">&times;</button></td>
     `;
 
-    row.querySelector('.time-period').value = data ? data.timePeriod : 'day';
+    row.querySelector('.time-period').value = data ? data.timePeriod : getDefaultTimePeriod();
     billingTableBody.appendChild(row);
 
     row.querySelectorAll('input, select').forEach(input => {
         input.addEventListener('input', () => calculatePatientTotal(row.closest('.patient-row')));
         if (input.classList.contains('billing-code-input')) {
             input.addEventListener('keyup', handleAutocomplete);
+            input.addEventListener('keydown', handleAutocompleteKeydown);
             input.addEventListener('change', () => { input.value = input.value.toUpperCase(); });
         }
     });
@@ -1369,26 +1376,71 @@ function loadScheduleFile(event) {
 function handleAutocomplete(e) {
     const input = e.target;
     const container = input.parentElement;
-    const val = input.value;
+    const val = input.value.toUpperCase();
     closeAllLists();
     if (!val) return false;
     currentAutocompleteInput = input;
+    currentFocus = -1;
 
     const list = document.createElement("DIV");
     list.setAttribute("class", "autocomplete-items");
     container.appendChild(list);
 
-    const matchingCodes = ohipFeeCodes.filter(code => code.toUpperCase().startsWith(val.toUpperCase()));
+    // Prefix matches first (highest relevance), then anywhere-in-code matches
+    const prefixMatches = ohipFeeCodes.filter(code => code.startsWith(val));
+    const containsMatches = ohipFeeCodes.filter(code => !code.startsWith(val) && code.includes(val));
+    const matchingCodes = [...prefixMatches, ...containsMatches];
+
     matchingCodes.slice(0, 100).forEach(code => {
         const item = document.createElement("DIV");
-        item.innerHTML = `<strong>${code.substr(0, val.length)}</strong>${code.substr(val.length)}`;
-        item.addEventListener("click", function(e) {
+        // Bold the matched segment wherever it appears
+        const matchIdx = code.indexOf(val);
+        item.innerHTML = code.substring(0, matchIdx)
+            + `<strong>${code.substring(matchIdx, matchIdx + val.length)}</strong>`
+            + code.substring(matchIdx + val.length);
+        item.addEventListener("click", function() {
             input.value = code;
             calculatePatientTotal(input.closest('.patient-row'));
             closeAllLists();
         });
         list.appendChild(item);
     });
+}
+
+/**
+ * Keyboard navigation for autocomplete: ArrowUp/Down to move, Enter to select, Escape to close.
+ */
+function handleAutocompleteKeydown(e) {
+    const input = e.target;
+    const list = input.parentElement.querySelector('.autocomplete-items');
+    if (!list) return;
+    const items = list.querySelectorAll('div');
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        currentFocus = Math.min(currentFocus + 1, items.length - 1);
+        setAutocompleteActive(items);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        currentFocus = Math.max(currentFocus - 1, -1);
+        setAutocompleteActive(items);
+    } else if (e.key === 'Enter') {
+        if (currentFocus > -1 && items[currentFocus]) {
+            e.preventDefault();
+            items[currentFocus].click();
+        }
+    } else if (e.key === 'Escape') {
+        closeAllLists();
+    }
+}
+
+function setAutocompleteActive(items) {
+    items.forEach(item => item.classList.remove('autocomplete-active'));
+    if (currentFocus >= 0 && currentFocus < items.length) {
+        items[currentFocus].classList.add('autocomplete-active');
+        items[currentFocus].scrollIntoView({ block: 'nearest' });
+    }
 }
 
 function closeAllLists(elmnt) {
@@ -1400,6 +1452,29 @@ function closeAllLists(elmnt) {
     }
 }
 document.addEventListener("click", function (e) { closeAllLists(e.target); });
+
+/**
+ * Returns the default time period for a new patient row based on the current
+ * shift's start time and date. Weekend overrides time-of-day logic.
+ * Ranges: night 00:00–06:59 | day 07:00–16:59 | evening 17:00–23:59
+ */
+function getDefaultTimePeriod() {
+    const dateStr = shiftDateInput.value;
+    // Weekend check: parse manually to avoid UTC timezone shift
+    if (dateStr) {
+        const parts = dateStr.split('-');
+        const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+        if (dayOfWeek === 0 || dayOfWeek === 6) return 'weekend';
+    }
+    // Extract start time from shift type name, e.g. "Shift 1 - Casino - 04:00"
+    const timeMatch = shiftTypeSelect.value.match(/(\d{2}):(\d{2})$/);
+    if (!timeMatch) return 'day';
+    const startHour = parseInt(timeMatch[1]) + parseInt(timeMatch[2]) / 60;
+    if (startHour >= 7 && startHour < 17) return 'day';
+    if (startHour >= 17) return 'evening';
+    return 'night';
+}
 
 // --- Sedation Calculator ---
 function calculateSedation() {

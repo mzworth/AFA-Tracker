@@ -109,6 +109,11 @@ body {
     background-color: #e9e9e9;
 }
 
+.autocomplete-active {
+    background-color: #3b82f6 !important;
+    color: white;
+}
+
 /* Modal Styles */
 .modal-overlay {
     position: fixed;
