@@ -1793,6 +1793,13 @@ function generateAnalyticsReport() {
     // Code frequency tracking
     const codeFrequency = {}; // { code: { count, totalUnits, totalValue } }
 
+    // Shift time-of-day breakdown (On Call excluded)
+    const shiftTimeBreakdown = { earlyMorning: 0, day: 0, aftnEvening: 0, lateNight: 0 };
+    const weekendShiftBreakdown = { earlyMorning: 0, day: 0, aftnEvening: 0, lateNight: 0 };
+
+    // Patient time period breakdown
+    const patientTimePeriod = { day: 0, evening: 0, night: 0, weekend: 0 };
+
     // New: Track regular shifts vs on-call separately for averages
     let regularShiftCount = 0;
 
@@ -1803,6 +1810,22 @@ function generateAnalyticsReport() {
         // Only count regular shifts for averages
         if (shift.shiftType !== 'On Call') {
             regularShiftCount++;
+        }
+
+        // Categorize shift by start time and day of week
+        const shiftTimeMatch = shift.shiftType.match(/(\d{2}):(\d{2})$/);
+        if (shiftTimeMatch) {
+            const startHour = parseInt(shiftTimeMatch[1]) + parseInt(shiftTimeMatch[2]) / 60;
+            const dateParts = shift.id.split('-');
+            const shiftDate = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+            const isWeekend = shiftDate.getDay() === 0 || shiftDate.getDay() === 6;
+            let timeCat;
+            if (startHour < 7) timeCat = 'earlyMorning';
+            else if (startHour < 17) timeCat = 'day';
+            else if (startHour < 20) timeCat = 'aftnEvening';
+            else timeCat = 'lateNight';
+            shiftTimeBreakdown[timeCat]++;
+            if (isWeekend) weekendShiftBreakdown[timeCat]++;
         }
 
         totalEarnings += earnings;
@@ -1863,6 +1886,9 @@ function generateAnalyticsReport() {
                 codeFrequency[code].totalUnits += units;
                 codeFrequency[code].totalValue += finalItemValues[index] * RELATIVITY_PREMIUM;
             });
+            // Track patient time period (day, evening, night, weekend)
+            const tp = (p.timePeriod || 'day').toLowerCase();
+            if (tp in patientTimePeriod) patientTimePeriod[tp]++;
         });
 
         totalOhipBillings += ohipTotal;
@@ -1912,6 +1938,28 @@ function generateAnalyticsReport() {
             <div class="summary-card"><p class="summary-label">Avg. Earnings / Reg. Shift</p><p class="summary-value">$${avgEarningsPerShift.toFixed(2)}</p></div>
         </div>
 
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Shift Schedule Breakdown</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="summary-card">
+                <p class="summary-label font-semibold mb-3">All Shifts by Start Time</p>
+                <div class="text-sm space-y-2">
+                    <div class="flex justify-between"><span class="text-gray-600">Early Morning (&lt;7am)</span><span class="font-semibold text-gray-800">${shiftTimeBreakdown.earlyMorning}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-600">Day (7am–5pm)</span><span class="font-semibold text-gray-800">${shiftTimeBreakdown.day}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-600">Afternoon/Evening (5pm–8pm)</span><span class="font-semibold text-gray-800">${shiftTimeBreakdown.aftnEvening}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-600">Late Evening/Night (8pm+)</span><span class="font-semibold text-gray-800">${shiftTimeBreakdown.lateNight}</span></div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <p class="summary-label font-semibold mb-3">Weekend Shifts by Start Time</p>
+                <div class="text-sm space-y-2">
+                    <div class="flex justify-between"><span class="text-gray-600">Early Morning (&lt;7am)</span><span class="font-semibold text-gray-800">${weekendShiftBreakdown.earlyMorning}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-600">Day (7am–5pm)</span><span class="font-semibold text-gray-800">${weekendShiftBreakdown.day}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-600">Afternoon/Evening (5pm–8pm)</span><span class="font-semibold text-gray-800">${weekendShiftBreakdown.aftnEvening}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-600">Late Evening/Night (8pm+)</span><span class="font-semibold text-gray-800">${weekendShiftBreakdown.lateNight}</span></div>
+                </div>
+            </div>
+        </div>
+
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Earnings Breakdown</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div class="summary-card"><p class="summary-label">AFA Earnings (Base + Patient)</p><p class="summary-value">$${totalAfaEarnings.toFixed(2)}</p></div>
@@ -1955,6 +2003,14 @@ function generateAnalyticsReport() {
                     <p class="text-xl font-bold text-gray-800">$${avgSelfPayPerPatient.toFixed(2)}</p>
                 </div>
             </div>
+        </div>
+
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Patient Time Period Breakdown</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+            <div class="summary-card"><p class="summary-label">Day Patients</p><p class="summary-value">${patientTimePeriod.day}</p></div>
+            <div class="summary-card"><p class="summary-label">Evening Patients</p><p class="summary-value">${patientTimePeriod.evening}</p></div>
+            <div class="summary-card"><p class="summary-label">Night Patients</p><p class="summary-value">${patientTimePeriod.night}</p></div>
+            <div class="summary-card"><p class="summary-label">Weekend Patients</p><p class="summary-value">${patientTimePeriod.weekend}</p></div>
         </div>
 
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Billing Code Frequency</h3>
