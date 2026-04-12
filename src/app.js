@@ -135,11 +135,41 @@ function clearStoreFromDB(storeName) {
 }
 
 // --- DATA ---
-let ohipFeeSchedule = {};
+let ohipFeeSchedule = {};         // most-recent version, used for autocomplete + OHIP tab display
+let feeScheduleVersions = [];     // [{ effectiveDate: 'YYYY-MM-DD', schedule, anaeUnitsData }] sorted asc
 let ohipFeeCodes = [];
 let anaesthesiaBaseUnits = {};
 const ANAESTHESIA_UNIT_FEE = 15.49;
-const RELATIVITY_PREMIUM = 1.10; // 10% Relativity Increase
+
+/**
+ * Returns the correct OHIP fee schedule object for the given shift date.
+ * Picks the most-recent version whose effectiveDate is <= shiftDate.
+ * Falls back to ohipFeeSchedule (most recent) if no date is supplied.
+ */
+function getScheduleForDate(dateStr) {
+    if (!feeScheduleVersions.length) return ohipFeeSchedule;
+    if (!dateStr) return feeScheduleVersions[feeScheduleVersions.length - 1].schedule;
+    const parts = dateStr.split('-');
+    const shiftDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    let best = feeScheduleVersions[0];
+    for (const v of feeScheduleVersions) {
+        const vp = v.effectiveDate.split('-');
+        const vDate = new Date(parseInt(vp[0]), parseInt(vp[1]) - 1, parseInt(vp[2]));
+        if (vDate <= shiftDate) best = v;
+    }
+    return best.schedule;
+}
+
+/**
+ * Returns the OHIP relativity premium multiplier for the given shift date.
+ * Apr 1 2026+: 4.8907% (1.048907). Before: 10% (1.10).
+ */
+function getRelativityPremium(dateStr) {
+    if (!dateStr) return 1.10;
+    const parts = dateStr.split('-');
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    return d >= new Date(2026, 3, 1) ? 1.048907 : 1.10;
+}
 
 const sedationModifiers = {
     age: [ { code: 'E014C', label: 'Newborn to 28 days', units: 5 }, { code: 'E009C', label: 'Infant 29 days to 1 year', units: 4 }, { code: 'E019C', label: 'Child 1 to 8 years', units: 2 }, { code: 'E007C', label: 'Adult 70-79 years', units: 1 }, { code: 'E018C', label: 'Adult > 79 years', units: 3 } ],
@@ -250,6 +280,7 @@ const appContainer = document.getElementById('app-container');
 const loadScheduleBtn = document.getElementById('loadScheduleBtn');
 const clearScheduleBtn = document.getElementById('clearScheduleBtn');
 const scheduleFileInput = document.getElementById('scheduleFileInput');
+const scheduleEffectiveDateInput = document.getElementById('scheduleEffectiveDateInput');
 const scheduleStatus = document.getElementById('schedule-status');
 const addPatientBtn = document.getElementById('addPatientBtn');
 const saveDataBtn = document.getElementById('saveDataBtn');
@@ -325,26 +356,45 @@ function showModal(title, message, buttons) {
 
 function hideModal() { genericModal.classList.add('hidden'); }
 
-function initializeWithScheduleData(scheduleData) {
-    ohipFeeSchedule = scheduleData.schedule;
+function initializeWithScheduleData(storedData) {
+    // Support both legacy {schedule, anaeUnitsData} and new {versions:[...]} format
+    let versions;
+    if (storedData.versions) {
+        versions = storedData.versions;
+    } else {
+        // Legacy single schedule — treat as effective from the beginning of time
+        versions = [{ effectiveDate: '2000-01-01', schedule: storedData.schedule, anaeUnitsData: storedData.anaeUnitsData }];
+    }
+
+    // Sort versions ascending by effectiveDate and load into memory
+    versions.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+    feeScheduleVersions = versions;
+
+    // Most recent version drives autocomplete and the OHIP Schedule tab display
+    const latest = versions[versions.length - 1];
+    ohipFeeSchedule = latest.schedule;
     ohipFeeCodes = Object.keys(ohipFeeSchedule).sort();
-    anaesthesiaBaseUnits = scheduleData.anaeUnitsData;
+    anaesthesiaBaseUnits = latest.anaeUnitsData;
 
     populateFeeScheduleTable();
     appContainer.classList.remove('disabled');
-    scheduleStatus.textContent = `Fee schedule loaded successfully with ${Object.keys(ohipFeeSchedule).length} codes.`;
+    const versionList = versions.map(v => v.effectiveDate).join(', ');
+    scheduleStatus.textContent = `${versions.length} schedule version(s) loaded: ${versionList}`;
     scheduleStatus.classList.add('text-green-600');
-    loadScheduleBtn.classList.add('hidden');
+    loadScheduleBtn.classList.remove('hidden');
     clearScheduleBtn.classList.remove('hidden');
-    headerSubtitle.textContent = 'OHIP Fee Schedule is loaded from your browser\'s memory. Clear it to load a new file.';
+    headerSubtitle.textContent = 'OHIP Fee Schedule is loaded from your browser\'s memory. Clear it to reload from file.';
 }
 
-function parseFeeScheduleData(data) {
+async function parseFeeScheduleData(data) {
+    const effectiveDate = scheduleEffectiveDateInput.value || new Date().toISOString().split('T')[0];
+
     const schedule = {};
     const anaeUnitsData = {};
     const lines = data.trim().split('\n');
-    const today = new Date();
-    const yyyymmdd = today.getFullYear().toString() + (today.getMonth() + 1).toString().padStart(2, '0') + today.getDate().toString().padStart(2, '0');
+    // Use the effective date as the "today" baseline for term-date filtering
+    const effParts = effectiveDate.split('-');
+    const yyyymmdd = effParts[0] + effParts[1].padStart(2,'0') + effParts[2].padStart(2,'0');
 
     lines.forEach(line => {
         if (line.length < 54) return;
@@ -376,9 +426,26 @@ function parseFeeScheduleData(data) {
     schedule['E420'] = { description: 'Trauma Premium', amount: 0, isModifier: true, anaeUnits: 0 };
     schedule['J149'] = { description: 'Ultrasound Guidance - Procedure', amount: 36.85, anaeUnits: 0 };
 
-    const fullScheduleData = { schedule, anaeUnitsData };
+    // Load existing stored versions and add/replace this one
+    const existing = await getDataFromDB(FEE_STORE_NAME, 'ohipSchedule');
+    let existingVersions = [];
+    if (existing) {
+        if (existing.data.versions) {
+            existingVersions = existing.data.versions;
+        } else {
+            // Migrate legacy single schedule
+            existingVersions = [{ effectiveDate: '2000-01-01', schedule: existing.data.schedule, anaeUnitsData: existing.data.anaeUnitsData }];
+        }
+    }
 
-    saveDataToDB(FEE_STORE_NAME, {id: 'ohipSchedule', data: fullScheduleData});
+    // Add or replace version for this effective date
+    const idx = existingVersions.findIndex(v => v.effectiveDate === effectiveDate);
+    const newVersion = { effectiveDate, schedule, anaeUnitsData };
+    if (idx >= 0) existingVersions[idx] = newVersion;
+    else existingVersions.push(newVersion);
+
+    const fullScheduleData = { versions: existingVersions };
+    await saveDataToDB(FEE_STORE_NAME, { id: 'ohipSchedule', data: fullScheduleData });
     initializeWithScheduleData(fullScheduleData);
 }
 
@@ -396,10 +463,11 @@ function showTab(tabName) {
     if (tabName === 'analytics') generateAnalyticsReport();
 }
 
-function getCodeValue(code) {
+function getCodeValue(code, dateStr) {
     const upperCode = code.toUpperCase();
-    if (upperCode.endsWith('C') && !ohipFeeSchedule[upperCode]) return ANAESTHESIA_UNIT_FEE;
-    return ohipFeeSchedule[upperCode] ? ohipFeeSchedule[upperCode].amount : 0;
+    const schedule = getScheduleForDate(dateStr);
+    if (upperCode.endsWith('C') && !schedule[upperCode]) return ANAESTHESIA_UNIT_FEE;
+    return schedule[upperCode] ? schedule[upperCode].amount : 0;
 }
 
 function calculatePatientTotal(row) {
@@ -423,7 +491,7 @@ function calculatePatientTotal(row) {
 
         // Only calculate for non-percentage-based codes in this pass
         if (code !== 'E412A' && code !== 'E412' && code !== 'E413A' && code !== 'E413') {
-            const value = getCodeValue(code);
+            const value = getCodeValue(code, shiftDateInput.value);
             itemValues[index] = value * units;
         }
     });
@@ -476,8 +544,8 @@ function calculatePatientTotal(row) {
     // Sum up all calculated and potentially reduced values
     let subTotal = finalItemValues.reduce((sum, value) => sum + value, 0);
 
-    // Apply 10% Relativity Increase
-    subTotal = subTotal * RELATIVITY_PREMIUM;
+    // Apply relativity increase (date-aware: 10% pre-Apr 2026, 4.8907% from Apr 2026)
+    subTotal = subTotal * getRelativityPremium(shiftDateInput.value);
 
     let finalTotal = row.querySelector('.is-trauma').checked ? subTotal * 1.5 : subTotal;
 
@@ -970,7 +1038,7 @@ function calculateSedation() {
     });
 
     const totalBasicUnits = base + timeUnits + modifierUnits;
-    const totalBilled = (totalBasicUnits * ANAESTHESIA_UNIT_FEE * RELATIVITY_PREMIUM) * timePremium;
+    const totalBilled = (totalBasicUnits * ANAESTHESIA_UNIT_FEE * getRelativityPremium(shiftDateInput.value)) * timePremium;
     const equivalentUnits = totalBilled / ANAESTHESIA_UNIT_FEE;
 
     document.getElementById('sedationBaseUnits').textContent = base;
@@ -1303,7 +1371,7 @@ function generateAnalyticsReport() {
                 const code = c.code.toUpperCase();
                 const units = parseInt(c.units, 10) || 1;
                 if (code !== 'E412A' && code !== 'E412' && code !== 'E413A' && code !== 'E413') {
-                    itemValues[index] = getCodeValue(code) * units;
+                    itemValues[index] = getCodeValue(code, shift.id) * units;
                 }
             });
             codes.forEach((c, index) => {
@@ -1330,7 +1398,7 @@ function generateAnalyticsReport() {
                 }
             });
             let subTotal = finalItemValues.reduce((sum, value) => sum + value, 0);
-            subTotal = subTotal * RELATIVITY_PREMIUM;
+            subTotal = subTotal * getRelativityPremium(shift.id);
             const pTotal = p.isTrauma ? subTotal * 1.5 : subTotal;
 
             if (p.isWSIB) billingTotals.wsib += pTotal;
@@ -1348,7 +1416,7 @@ function generateAnalyticsReport() {
                 }
                 codeFrequency[code].count++;
                 codeFrequency[code].totalUnits += units;
-                codeFrequency[code].totalValue += finalItemValues[index] * RELATIVITY_PREMIUM;
+                codeFrequency[code].totalValue += finalItemValues[index] * getRelativityPremium(shift.id);
             });
             // Track patient time period (day, evening, night, weekend)
             const tp = (p.timePeriod || 'day').toLowerCase();
@@ -1553,7 +1621,7 @@ function calculateShiftTotals(shift) {
             const code = c.code.toUpperCase();
             const units = parseInt(c.units, 10) || 1;
             if (code !== 'E412A' && code !== 'E412' && code !== 'E413A' && code !== 'E413') {
-                itemValues[index] = getCodeValue(code) * units;
+                itemValues[index] = getCodeValue(code, shift.id) * units;
             }
         });
 
@@ -1587,8 +1655,8 @@ function calculateShiftTotals(shift) {
         // Final Summation for the patient
         let subTotal = finalItemValues.reduce((sum, value) => sum + value, 0);
 
-        // Apply 10% Relativity Increase
-        subTotal = subTotal * RELATIVITY_PREMIUM;
+        // Apply relativity increase (date-aware: 10% pre-Apr 2026, 4.8907% from Apr 2026)
+        subTotal = subTotal * getRelativityPremium(shift.id);
 
         const rowTotal = p.isTrauma ? subTotal * 1.5 : subTotal;
         // --- End of Corrected Calculation Logic ---
@@ -1960,6 +2028,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateAfaRatesTable();
 
     // --- DB and Data Initialization ---
+    // Default effective date to today for new uploads
+    scheduleEffectiveDateInput.value = new Date().toISOString().split('T')[0];
+
     try {
         await openDB();
         const storedSchedule = await getDataFromDB(FEE_STORE_NAME, 'ohipSchedule');

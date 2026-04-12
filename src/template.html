@@ -21,11 +21,15 @@
             <p id="header-subtitle" class="text-gray-600 mt-2">To begin, please load the official OHIP Fee Schedule Master file (`OHIPMASTER.001` or similar).</p>
         </header>
 
-        <div class="mb-6 flex items-center space-x-2">
+        <div class="mb-6 flex items-center flex-wrap gap-2">
             <button id="loadScheduleBtn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Load OHIP Fee Schedule File</button>
-            <button id="clearScheduleBtn" class="hidden bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Clear Stored Schedule</button>
+            <div id="scheduleEffectiveDateContainer" class="flex items-center gap-1">
+                <label for="scheduleEffectiveDateInput" class="text-sm font-medium text-gray-700 whitespace-nowrap">Effective Date:</label>
+                <input type="date" id="scheduleEffectiveDateInput" class="table-input text-sm">
+            </div>
+            <button id="clearScheduleBtn" class="hidden bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Clear All Schedules</button>
             <input type="file" id="scheduleFileInput" class="hidden" accept=".001">
-            <span id="schedule-status" class="ml-4 text-gray-600">Checking for stored schedule...</span>
+            <span id="schedule-status" class="ml-2 text-gray-600">Checking for stored schedule...</span>
         </div>
 
         <div id="app-container" class="disabled">
