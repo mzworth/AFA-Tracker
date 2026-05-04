@@ -74,6 +74,10 @@
                                      <input id="stat-holiday-checkbox" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded">
                                      <label for="stat-holiday-checkbox" class="ml-2 block text-sm text-gray-900">Statutory Holiday</label>
                                  </div>
+                                 <div id="last-minute-pickup-container" class="hidden flex items-center pb-2 lg:col-span-1">
+                                     <input id="last-minute-pickup-checkbox" type="checkbox" class="h-4 w-4 text-green-600 border-gray-300 rounded">
+                                     <label for="last-minute-pickup-checkbox" class="ml-2 block text-sm text-gray-900">Last-Minute Pickup <span class="text-green-600 font-semibold">(+$500)</span></label>
+                                 </div>
                              </div>
 
                              <!-- On Call Hours Section (Hidden by default) -->
@@ -97,6 +101,47 @@
                                          <input type="number" id="oncall-weekend-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
                                      </div>
                                  </div>
+                             </div>
+
+                             <!-- HOCC Call-In Section (Hidden by default) -->
+                             <div id="hocc-container" class="hidden mt-4 pt-4 border-t border-gray-100">
+                                 <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+                                     <h3 class="text-sm font-semibold text-gray-700">HOCC Call-In Details</h3>
+                                     <div class="flex flex-wrap items-center gap-4">
+                                         <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                                             <input type="radio" name="hocc-tier" id="hocc-standard-radio" value="standard" checked class="h-4 w-4 text-blue-600">
+                                             Standard ($2,500)
+                                         </label>
+                                         <label class="flex items-center gap-1.5 text-sm text-orange-600 font-medium cursor-pointer">
+                                             <input type="radio" name="hocc-tier" id="hocc-premium-radio" value="premium" class="h-4 w-4 text-orange-500">
+                                             Premium ($4,000)
+                                         </label>
+                                         <label class="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                                             <input type="checkbox" id="hocc-overnight-checkbox" class="h-4 w-4 text-purple-500 border-gray-300 rounded">
+                                             Overnight call-in (0100–0400)
+                                         </label>
+                                     </div>
+                                 </div>
+                                 <p class="text-xs text-gray-400 mb-3">Hours paid at 2× standard rate, capped at 8 hrs. Premium auto-selected for Christmas Eve/Day, NYE/NYD, or overnight 0100–0400.</p>
+                                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Day (08-17) - $120/hr</label>
+                                         <input type="number" id="hocc-day-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Evening (17-00) - $144/hr</label>
+                                         <input type="number" id="hocc-evening-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Night (00-08) - $210/hr</label>
+                                         <input type="number" id="hocc-night-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Weekend - $180/hr</label>
+                                         <input type="number" id="hocc-weekend-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                 </div>
+                                 <p id="hocc-hours-warning" class="hidden text-xs text-orange-500 mt-2">⚠ Total hours exceed 8 — hourly pay capped at 8 hours.</p>
                              </div>
                          </div>
 

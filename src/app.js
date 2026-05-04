@@ -268,6 +268,36 @@ const onCallRates = {
     weekend: 90
 };
 
+// HOCC Call-In constants (effective April 1, 2026)
+const HOCC_STIPEND_STANDARD = 2500;
+const HOCC_STIPEND_PREMIUM  = 4000;
+const HOCC_HOURS_CAP        = 8;
+
+/**
+ * Calculates total HOCC call-in pay.
+ * Stipend + (hours worked at 2× on-call rate, total capped at 8 hrs).
+ */
+function calculateHoccPay(hoursObj, isPremium) {
+    const d = hoursObj.day     || 0;
+    const e = hoursObj.evening || 0;
+    const n = hoursObj.night   || 0;
+    const w = hoursObj.weekend || 0;
+    const totalHours = d + e + n + w;
+    const capRatio   = totalHours > HOCC_HOURS_CAP ? HOCC_HOURS_CAP / totalHours : 1;
+    const hourlyPay  = (d * onCallRates.day + e * onCallRates.evening +
+                        n * onCallRates.night + w * onCallRates.weekend) * 2 * capRatio;
+    return (isPremium ? HOCC_STIPEND_PREMIUM : HOCC_STIPEND_STANDARD) + hourlyPay;
+}
+
+/** Returns true if the given YYYY-MM-DD date qualifies for HOCC premium. */
+function isHoccPremiumDate(dateStr) {
+    if (!dateStr) return false;
+    const parts = dateStr.split('-');
+    const m = parseInt(parts[1]);
+    const d = parseInt(parts[2]);
+    return (m === 12 && (d === 24 || d === 25 || d === 31)) || (m === 1 && d === 1);
+}
+
 // --- STATE ---
 let patientCounter = 0;
 let currentAutocompleteInput = null;
@@ -304,6 +334,17 @@ const onCallDayHours = document.getElementById('oncall-day-hours');
 const onCallEveningHours = document.getElementById('oncall-evening-hours');
 const onCallNightHours = document.getElementById('oncall-night-hours');
 const onCallWeekendHours = document.getElementById('oncall-weekend-hours');
+const hoccContainer = document.getElementById('hocc-container');
+const hoccStandardRadio = document.getElementById('hocc-standard-radio');
+const hoccPremiumRadio = document.getElementById('hocc-premium-radio');
+const hoccOvernightCheckbox = document.getElementById('hocc-overnight-checkbox');
+const hoccDayHours = document.getElementById('hocc-day-hours');
+const hoccEveningHours = document.getElementById('hocc-evening-hours');
+const hoccNightHours = document.getElementById('hocc-night-hours');
+const hoccWeekendHours = document.getElementById('hocc-weekend-hours');
+const hoccHoursWarning = document.getElementById('hocc-hours-warning');
+const lastMinutePickupContainer = document.getElementById('last-minute-pickup-container');
+const lastMinutePickupCheckbox = document.getElementById('last-minute-pickup-checkbox');
 
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 const exportJsonBtn = document.getElementById('exportJsonBtn');
@@ -702,16 +743,21 @@ function displayCurrentShiftEarnings() {
     const isStatHoliday = statHolidayCheckbox.checked;
 
     let basePay = 0;
-    // Logic: Use activeBasePay if available (shift loaded from history), otherwise calculate from table or On Call Logic
+    // Logic: Use activeBasePay if available (shift loaded from history), otherwise calculate live
     if (activeBasePay !== null && activeBasePay !== undefined) {
         basePay = activeBasePay;
     } else if (shiftType === 'On Call') {
-        // Live calculation for On Call if not already saved/frozen
         const d = parseFloat(onCallDayHours.value) || 0;
         const e = parseFloat(onCallEveningHours.value) || 0;
         const n = parseFloat(onCallNightHours.value) || 0;
         const w = parseFloat(onCallWeekendHours.value) || 0;
         basePay = (d * onCallRates.day) + (e * onCallRates.evening) + (n * onCallRates.night) + (w * onCallRates.weekend);
+    } else if (shiftType === 'HOCC Call-In') {
+        const d = parseFloat(hoccDayHours.value) || 0;
+        const e = parseFloat(hoccEveningHours.value) || 0;
+        const n = parseFloat(hoccNightHours.value) || 0;
+        const w = parseFloat(hoccWeekendHours.value) || 0;
+        basePay = calculateHoccPay({ day: d, evening: e, night: n, weekend: w }, hoccPremiumRadio.checked);
     } else if (shiftDetails) {
         // Standard Calculation logic
         if (dayOfWeek === 0 || dayOfWeek === 6 || isStatHoliday) {
@@ -764,7 +810,12 @@ function displayCurrentShiftEarnings() {
 
     const ohipTakeHome = regularOhipTotal * ohipPercentage;
     const selfPayTakeHome = selfPayShadowTotal * ohipPercentage;
-    const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal;
+    const lastMinuteBonus = (shiftType !== 'On Call' && shiftType !== 'HOCC Call-In' && lastMinutePickupCheckbox.checked) ? 500 : 0;
+    const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal + lastMinuteBonus;
+
+    const lastMinuteCard = lastMinuteBonus > 0
+        ? `<div class="summary-card border-2 border-green-400"><p class="summary-label">Last-Minute Pickup</p><p class="summary-value text-green-600">+$500.00</p></div>`
+        : '';
 
     earningsCardsContainer.innerHTML = `
         <div class="summary-card"><p class="summary-label">Base Pay</p><p class="summary-value">$${basePay.toFixed(2)}</p></div>
@@ -774,6 +825,7 @@ function displayCurrentShiftEarnings() {
         <div class="summary-card"><p class="summary-label">Self-Pay Shadow (${(ohipPercentage * 100).toFixed(0)}%)</p><p class="summary-value">$${selfPayTakeHome.toFixed(2)}</p></div>
         <div class="summary-card"><p class="summary-label">WSIB Forms</p><p class="summary-value">$${wsibFormFeeTotal.toFixed(2)}</p></div>
         <div class="summary-card"><p class="summary-label">IFH Earnings (100%)</p><p class="summary-value">$${ifhTotal.toFixed(2)}</p></div>
+        ${lastMinuteCard}
         <div class="summary-card bg-blue-500 text-white"><p class="summary-label text-blue-200">Total Earnings</p><p class="summary-value text-white">$${totalEarnings.toFixed(2)}</p></div>
         <div class="summary-card col-span-full"><p class="summary-label">Patient Breakdown (Total: ${rows.length})</p><div class="text-sm grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">${Object.keys(patientCounts).map(p => `<div><p class="font-semibold capitalize">${p} (Total: ${patientCounts[p].total})</p><p>OHIP: ${patientCounts[p].ohip}</p><p>WSIB: ${patientCounts[p].wsib}</p><p>IFH: ${patientCounts[p].ifh}</p><p>Self Pay: ${patientCounts[p].selfPay}</p></div>`).join('')}</div></div>`;
 }
@@ -812,6 +864,7 @@ async function performSave(shiftId) {
     // Calculate Base Pay to Save
     let payToSave = 0;
     let onCallHours = null;
+    let hoccData = null;
 
     if (activeBasePay !== null && activeBasePay !== undefined) {
         payToSave = activeBasePay;
@@ -825,6 +878,14 @@ async function performSave(shiftId) {
             const w = parseFloat(onCallWeekendHours.value) || 0;
             payToSave = (d * onCallRates.day) + (e * onCallRates.evening) + (n * onCallRates.night) + (w * onCallRates.weekend);
             onCallHours = { day: d, evening: e, night: n, weekend: w };
+        } else if (shiftType === 'HOCC Call-In') {
+            const d = parseFloat(hoccDayHours.value) || 0;
+            const e = parseFloat(hoccEveningHours.value) || 0;
+            const n = parseFloat(hoccNightHours.value) || 0;
+            const w = parseFloat(hoccWeekendHours.value) || 0;
+            const isPremium = hoccPremiumRadio.checked;
+            hoccData = { isPremium, isOvernight: hoccOvernightCheckbox.checked, hours: { day: d, evening: e, night: n, weekend: w } };
+            payToSave = calculateHoccPay({ day: d, evening: e, night: n, weekend: w }, isPremium);
         } else {
             const shiftDateObj = new Date(shiftDateInput.value + 'T00:00:00');
             // Use date-aware rates
@@ -846,12 +907,16 @@ async function performSave(shiftId) {
         }
     }
 
+    const shiftTypeSaving = shiftTypeSelect.value;
     const currentShiftData = {
         id: shiftId,
-        shiftType: shiftTypeSelect.value,
+        shiftType: shiftTypeSaving,
         isStatHoliday: statHolidayCheckbox.checked,
         basePay: payToSave,
-        onCallHours: onCallHours, // Save on call hours if applicable
+        onCallHours: onCallHours,
+        hoccData: hoccData,
+        isLastMinutePickup: (shiftTypeSaving !== 'On Call' && shiftTypeSaving !== 'HOCC Call-In')
+            ? lastMinutePickupCheckbox.checked : false,
         patients: []
     };
 
@@ -1130,9 +1195,27 @@ function loadShiftData(shiftId) {
                     onCallNightHours.value = shiftData.onCallHours.night || 0;
                     onCallWeekendHours.value = shiftData.onCallHours.weekend || 0;
                 }
+            } else if (shiftData.shiftType === 'HOCC Call-In') {
+                toggleOnCallUI('HOCC Call-In');
+                if (shiftData.hoccData) {
+                    const h = shiftData.hoccData;
+                    hoccPremiumRadio.checked   = h.isPremium;
+                    hoccStandardRadio.checked  = !h.isPremium;
+                    hoccOvernightCheckbox.checked = h.isOvernight || false;
+                    if (h.hours) {
+                        hoccDayHours.value     = h.hours.day     || 0;
+                        hoccEveningHours.value = h.hours.evening || 0;
+                        hoccNightHours.value   = h.hours.night   || 0;
+                        hoccWeekendHours.value = h.hours.weekend || 0;
+                    }
+                    const total = (h.hours?.day || 0) + (h.hours?.evening || 0) +
+                                  (h.hours?.night || 0) + (h.hours?.weekend || 0);
+                    hoccHoursWarning.classList.toggle('hidden', total <= HOCC_HOURS_CAP);
+                }
             } else {
                 toggleOnCallUI('regular');
                 statHolidayCheckbox.checked = shiftData.isStatHoliday;
+                lastMinutePickupCheckbox.checked = shiftData.isLastMinutePickup || false;
             }
 
             // Set active saved base pay
@@ -1156,39 +1239,82 @@ function updateShiftDropdown(dateString) {
     const previousValue = shiftTypeSelect.value;
 
     let optionsHtml = Object.keys(currentRates).map(name => `<option value="${name}">${name}</option>`).join('');
-    // Add On Call Option
     optionsHtml += '<option value="On Call">On Call (Hourly)</option>';
+    optionsHtml += '<option value="HOCC Call-In">HOCC Call-In</option>';
 
     shiftTypeSelect.innerHTML = optionsHtml;
 
     // Try to maintain selection if possible
-    if(previousValue === 'On Call' || currentRates[previousValue]) {
+    const specialTypes = ['On Call', 'HOCC Call-In'];
+    if (specialTypes.includes(previousValue) || currentRates[previousValue]) {
         shiftTypeSelect.value = previousValue;
     } else {
-        // Default to first if previous not valid
-         shiftTypeSelect.value = Object.keys(currentRates)[0];
+        shiftTypeSelect.value = Object.keys(currentRates)[0];
     }
 }
 
 function toggleOnCallUI(type) {
-    if (type === 'On Call') {
-        statHolidayContainer.classList.add('hidden');
-        onCallHoursContainer.classList.remove('hidden');
-    } else {
-        statHolidayContainer.classList.remove('hidden');
-        onCallHoursContainer.classList.add('hidden');
-        // Reset inputs
+    const isOnCall  = type === 'On Call';
+    const isHocc    = type === 'HOCC Call-In';
+    const isRegular = !isOnCall && !isHocc;
+
+    statHolidayContainer.classList.toggle('hidden', !isRegular);
+    lastMinutePickupContainer.classList.toggle('hidden', !isRegular);
+    onCallHoursContainer.classList.toggle('hidden', !isOnCall);
+    hoccContainer.classList.toggle('hidden', !isHocc);
+
+    if (!isOnCall) {
         onCallDayHours.value = '';
         onCallEveningHours.value = '';
         onCallNightHours.value = '';
         onCallWeekendHours.value = '';
     }
+    if (!isHocc) {
+        hoccDayHours.value = '';
+        hoccEveningHours.value = '';
+        hoccNightHours.value = '';
+        hoccWeekendHours.value = '';
+        hoccOvernightCheckbox.checked = false;
+        hoccHoursWarning.classList.add('hidden');
+    }
+    if (!isRegular) {
+        lastMinutePickupCheckbox.checked = false;
+    }
 
-    // Listeners for dynamic calculation
+    // Auto-select premium tier when HOCC section opens based on date
+    if (isHocc && isHoccPremiumDate(shiftDateInput.value)) {
+        hoccPremiumRadio.checked = true;
+    }
+
+    // Listeners for dynamic recalculation
     [onCallDayHours, onCallEveningHours, onCallNightHours, onCallWeekendHours].forEach(input => {
-        input.removeEventListener('input', updateViews); // prevent duplicate
+        input.removeEventListener('input', updateViews);
         input.addEventListener('input', updateViews);
     });
+    [hoccDayHours, hoccEveningHours, hoccNightHours, hoccWeekendHours].forEach(input => {
+        input.removeEventListener('input', updateHoccWarningAndViews);
+        input.addEventListener('input', updateHoccWarningAndViews);
+    });
+    [hoccStandardRadio, hoccPremiumRadio, hoccOvernightCheckbox].forEach(el => {
+        el.removeEventListener('change', updateViews);
+        el.addEventListener('change', updateViews);
+    });
+    hoccOvernightCheckbox.removeEventListener('change', onHoccOvernightChange);
+    hoccOvernightCheckbox.addEventListener('change', onHoccOvernightChange);
+    lastMinutePickupCheckbox.removeEventListener('change', updateViews);
+    lastMinutePickupCheckbox.addEventListener('change', updateViews);
+}
+
+function updateHoccWarningAndViews() {
+    const total = (parseFloat(hoccDayHours.value) || 0) + (parseFloat(hoccEveningHours.value) || 0) +
+                  (parseFloat(hoccNightHours.value) || 0) + (parseFloat(hoccWeekendHours.value) || 0);
+    hoccHoursWarning.classList.toggle('hidden', total <= HOCC_HOURS_CAP);
+    updateViews();
+}
+
+function onHoccOvernightChange() {
+    if (hoccOvernightCheckbox.checked) hoccPremiumRadio.checked = true;
+    updateViews();
 }
 
 async function deleteCurrentShift() {
@@ -1336,20 +1462,23 @@ function generateAnalyticsReport() {
     // Patient time period breakdown
     const patientTimePeriod = { day: 0, evening: 0, night: 0, weekend: 0 };
 
-    // New: Track regular shifts vs on-call separately for averages
+    // Track shift type counts
     let regularShiftCount = 0;
+    let hoccCount = 0;
 
     filteredShifts.forEach(shift => {
         const shiftTotals = calculateShiftTotals(shift);
         const { earnings, ohipTotal, patientBreakdown, basePay, perPatientTotal, ohipTakeHome, ifhTakeHomeTotal, selfPayTakeHome, wsibTakeHome, wsibFormFeeTotal, patientsOver80Count } = shiftTotals;
 
-        // Only count regular shifts for averages
-        if (shift.shiftType !== 'On Call') {
+        // Only count regular (non-On-Call, non-HOCC) shifts for averages
+        const isSpecialShift = shift.shiftType === 'On Call' || shift.shiftType === 'HOCC Call-In';
+        if (!isSpecialShift) {
             regularShiftCount++;
         }
+        if (shift.shiftType === 'HOCC Call-In') hoccCount++;
 
-        // Ozone vs non-Ozone earnings (excludes On Call)
-        if (shift.shiftType !== 'On Call') {
+        // Ozone vs non-Ozone earnings (excludes On Call and HOCC)
+        if (!isSpecialShift) {
             if (shift.shiftType.includes('Ozone')) {
                 ozoneEarnings += earnings;
                 ozoneCount++;
@@ -1483,7 +1612,7 @@ function generateAnalyticsReport() {
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Overall Performance for ${reportTitleText}</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div class="summary-card"><p class="summary-label">Total Earnings</p><p class="summary-value">$${totalEarnings.toFixed(2)}</p></div>
-            <div class="summary-card"><p class="summary-label">Total Shifts (Regular + OnCall)</p><p class="summary-value">${filteredShifts.length} <span class="text-sm font-normal text-gray-500">(${regularShiftCount} reg)</span></p></div>
+            <div class="summary-card"><p class="summary-label">Total Shifts</p><p class="summary-value">${filteredShifts.length} <span class="text-sm font-normal text-gray-500">(${regularShiftCount} reg${hoccCount > 0 ? `, ${hoccCount} HOCC` : ''})</span></p></div>
             <div class="summary-card"><p class="summary-label">Avg. Earnings / Reg. Shift</p><p class="summary-value">$${avgEarningsPerShift.toFixed(2)}</p></div>
         </div>
 
@@ -1735,9 +1864,10 @@ function calculateShiftTotals(shift) {
     const ohipPercentage = shift.isStatHoliday ? 0.63 : 0.38;
     const ohipTakeHome = regularOhipTotal * ohipPercentage;
     const selfPayTakeHome = selfPayShadowTotal * ohipPercentage;
+    const lastMinuteBonus = shift.isLastMinutePickup ? 500 : 0;
 
-    // Total Earnings = Base Pay + Per Patient (OHIP) + Shadow (OHIP) + 100% (Non-OHIP) + WSIB Bonus
-    const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal;
+    // Total Earnings = Base Pay + Per Patient (OHIP) + Shadow (OHIP) + 100% (Non-OHIP) + WSIB Bonus + Last-Minute
+    const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal + lastMinuteBonus;
 
     return {
         earnings: totalEarnings,
@@ -2007,6 +2137,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const shiftType = e.target.value;
         if (shiftType === 'On Call') {
             toggleOnCallUI('On Call');
+        } else if (shiftType === 'HOCC Call-In') {
+            toggleOnCallUI('HOCC Call-In');
         } else {
             toggleOnCallUI('regular');
         }
