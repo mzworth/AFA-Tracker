@@ -1869,6 +1869,10 @@ function generateAnalyticsReport() {
     const shiftTimeBreakdown = { earlyMorning: 0, day: 0, aftnEvening: 0, lateNight: 0 };
     const weekendShiftBreakdown = { earlyMorning: 0, day: 0, aftnEvening: 0, lateNight: 0 };
 
+    // Ozone vs non-Ozone earnings (On Call excluded)
+    let ozoneEarnings = 0, ozoneCount = 0;
+    let nonOzoneEarnings = 0, nonOzoneCount = 0;
+
     // Patient time period breakdown
     const patientTimePeriod = { day: 0, evening: 0, night: 0, weekend: 0 };
 
@@ -1882,6 +1886,17 @@ function generateAnalyticsReport() {
         // Only count regular shifts for averages
         if (shift.shiftType !== 'On Call') {
             regularShiftCount++;
+        }
+
+        // Ozone vs non-Ozone earnings (excludes On Call)
+        if (shift.shiftType !== 'On Call') {
+            if (shift.shiftType.includes('Ozone')) {
+                ozoneEarnings += earnings;
+                ozoneCount++;
+            } else {
+                nonOzoneEarnings += earnings;
+                nonOzoneCount++;
+            }
         }
 
         // Categorize shift by start time and day of week
@@ -1981,6 +1996,8 @@ function generateAnalyticsReport() {
 
     const avgEarningsPerShift = regularShiftCount > 0 ? totalEarnings / regularShiftCount : 0;
     const avgPatientsPerShift = regularShiftCount > 0 ? totalPatients / regularShiftCount : 0;
+    const avgOzoneEarnings = ozoneCount > 0 ? ozoneEarnings / ozoneCount : 0;
+    const avgNonOzoneEarnings = nonOzoneCount > 0 ? nonOzoneEarnings / nonOzoneCount : 0;
 
     // Calculate specific averages
     const avgOhipPerPatient = monthlyPatientCounts.ohip > 0 ? billingTotals.ohip / monthlyPatientCounts.ohip : 0;
@@ -2011,7 +2028,7 @@ function generateAnalyticsReport() {
         </div>
 
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Shift Schedule Breakdown</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             <div class="summary-card">
                 <p class="summary-label font-semibold mb-3">All Shifts by Start Time</p>
                 <div class="text-sm space-y-2">
@@ -2028,6 +2045,23 @@ function generateAnalyticsReport() {
                     <div class="flex justify-between"><span class="text-gray-600">Day (7am–5pm)</span><span class="font-semibold text-gray-800">${weekendShiftBreakdown.day}</span></div>
                     <div class="flex justify-between"><span class="text-gray-600">Afternoon/Evening (5pm–8pm)</span><span class="font-semibold text-gray-800">${weekendShiftBreakdown.aftnEvening}</span></div>
                     <div class="flex justify-between"><span class="text-gray-600">Late Evening/Night (8pm+)</span><span class="font-semibold text-gray-800">${weekendShiftBreakdown.lateNight}</span></div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <p class="summary-label font-semibold mb-3">Ozone vs Non-Ozone</p>
+                <div class="text-sm space-y-3">
+                    <div>
+                        <div class="flex justify-between mb-1"><span class="text-gray-600">Ozone shifts</span><span class="font-semibold text-gray-800">${ozoneCount}</span></div>
+                        <div class="flex justify-between"><span class="text-gray-500 text-xs">Avg earnings</span><span class="font-semibold text-blue-600">$${avgOzoneEarnings.toFixed(2)}</span></div>
+                    </div>
+                    <div class="border-t pt-3">
+                        <div class="flex justify-between mb-1"><span class="text-gray-600">Non-Ozone shifts</span><span class="font-semibold text-gray-800">${nonOzoneCount}</span></div>
+                        <div class="flex justify-between"><span class="text-gray-500 text-xs">Avg earnings</span><span class="font-semibold text-indigo-600">$${avgNonOzoneEarnings.toFixed(2)}</span></div>
+                    </div>
+                    ${(ozoneCount > 0 && nonOzoneCount > 0) ? `
+                    <div class="border-t pt-3">
+                        <div class="flex justify-between"><span class="text-gray-500 text-xs">Difference</span><span class="font-semibold ${avgOzoneEarnings >= avgNonOzoneEarnings ? 'text-green-600' : 'text-red-500'}">$${Math.abs(avgOzoneEarnings - avgNonOzoneEarnings).toFixed(2)} ${avgOzoneEarnings >= avgNonOzoneEarnings ? '(Ozone higher)' : '(Non-Ozone higher)'}</span></div>
+                    </div>` : ''}
                 </div>
             </div>
         </div>
