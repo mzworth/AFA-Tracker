@@ -255,10 +255,20 @@ const feb2026Rates = {
     'Shift 20 - Overnight - 23:59': { weekday: 1240, friday: 1610, weekend: 1610, startTime: '23:59' }
 };
 
-const afaRates = {
+const afaRates_pre2026May = {
     perPatient: { day: 32.18, evening: 38.30, night: 59.54, weekend: 51.49 },
-    agePremium: 15, wsibPremium: 85
+    age65Premium: 0, age80Premium: 15, wsibPremium: 85
 };
+const afaRates_may2026 = {
+    perPatient: { day: 40.91, evening: 54.00, night: 71.59, weekend: 61.36 },
+    age65Premium: 10, age80Premium: 20, wsibPremium: 85
+};
+function getAfaRatesForDate(dateStr) {
+    if (!dateStr) return afaRates_may2026;
+    const parts = dateStr.split('-');
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    return d >= new Date(2026, 4, 1) ? afaRates_may2026 : afaRates_pre2026May;
+}
 
 // On Call Rates
 const onCallRates = {
@@ -624,6 +634,7 @@ function addPatientRow(data = null) {
     row.innerHTML = `
         <td class="p-2 text-center">${patientCounter}</td>
         <td class="p-2"><select class="table-input time-period" style="min-width: 90px;"><option>day</option><option>evening</option><option>night</option><option>weekend</option></select></td>
+        <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-purple-600 border-gray-300 rounded age-65-plus" ${data && data.age65plus ? 'checked' : ''}></td>
         <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded age-80-plus" ${data && data.age80plus ? 'checked' : ''}></td>
         <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-wsib" ${data && data.isWSIB ? 'checked' : ''}></td>
         <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-self-pay" ${data && data.isSelfPay ? 'checked' : ''}></td>
@@ -636,6 +647,12 @@ function addPatientRow(data = null) {
 
     row.querySelector('.time-period').value = data ? data.timePeriod : getDefaultTimePeriod();
     billingTableBody.appendChild(row);
+
+    // Age checkboxes are mutually exclusive (65-79 vs 80+)
+    const age65cb = row.querySelector('.age-65-plus');
+    const age80cb = row.querySelector('.age-80-plus');
+    age65cb.addEventListener('change', () => { if (age65cb.checked) age80cb.checked = false; });
+    age80cb.addEventListener('change', () => { if (age80cb.checked) age65cb.checked = false; });
 
     row.querySelectorAll('input, select').forEach(input => {
         input.addEventListener('input', () => calculatePatientTotal(row.closest('.patient-row')));
@@ -791,16 +808,20 @@ function displayCurrentShiftEarnings() {
             selfPayShadowTotal += rowTotal;
             patientCounts[timePeriod].selfPay++;
 
-            let patientEarning = afaRates.perPatient[timePeriod];
-            if (row.querySelector('.age-80-plus').checked) patientEarning += afaRates.agePremium;
+            const rates = getAfaRatesForDate(shiftDateInput.value);
+            let patientEarning = rates.perPatient[timePeriod];
+            if (row.querySelector('.age-80-plus').checked) patientEarning += rates.age80Premium;
+            else if (row.querySelector('.age-65-plus').checked) patientEarning += rates.age65Premium;
             perPatientTotal += patientEarning;
         } else {
             // Standard OHIP: Shadow billing % + Per-patient stipend
             regularOhipTotal += rowTotal;
             patientCounts[timePeriod].ohip++;
 
-            let patientEarning = afaRates.perPatient[timePeriod];
-            if (row.querySelector('.age-80-plus').checked) patientEarning += afaRates.agePremium;
+            const rates = getAfaRatesForDate(shiftDateInput.value);
+            let patientEarning = rates.perPatient[timePeriod];
+            if (row.querySelector('.age-80-plus').checked) patientEarning += rates.age80Premium;
+            else if (row.querySelector('.age-65-plus').checked) patientEarning += rates.age65Premium;
             perPatientTotal += patientEarning;
         }
     });
@@ -933,6 +954,7 @@ async function performSave(shiftId) {
         });
         currentShiftData.patients.push({
             timePeriod: row.querySelector('.time-period').value,
+            age65plus: row.querySelector('.age-65-plus').checked,
             age80plus: row.querySelector('.age-80-plus').checked,
             isWSIB: row.querySelector('.is-wsib').checked,
             isSelfPay: row.querySelector('.is-self-pay').checked,
@@ -1772,6 +1794,8 @@ function calculateShiftTotals(shift) {
     let perPatientTotal = 0, wsibFormFeeTotal = 0, selfPayShadowTotal = 0, wsibTotal = 0, ifhTotal = 0, regularOhipTotal = 0, totalOhipBilled = 0;
     let patientBreakdown = { ohip: 0, wsib: 0, ifh: 0, selfPay: 0 };
     let patientsOver80Count = 0;
+    let patientsOver65Count = 0;
+    const shiftRates = getAfaRatesForDate(shift.id);
 
     (shift.patients || []).forEach(p => {
 
@@ -1840,10 +1864,13 @@ function calculateShiftTotals(shift) {
             selfPayShadowTotal += rowTotal;
             patientBreakdown.selfPay++;
 
-            let patientEarning = afaRates.perPatient[p.timePeriod] || 0;
+            let patientEarning = shiftRates.perPatient[p.timePeriod] || 0;
             if (p.age80plus) {
-                patientEarning += afaRates.agePremium;
+                patientEarning += shiftRates.age80Premium;
                 patientsOver80Count++;
+            } else if (p.age65plus) {
+                patientEarning += shiftRates.age65Premium;
+                patientsOver65Count++;
             }
             perPatientTotal += patientEarning;
         } else {
@@ -1852,10 +1879,13 @@ function calculateShiftTotals(shift) {
             patientBreakdown.ohip++;
 
             // Per patient incentives are OHIP only
-            let patientEarning = afaRates.perPatient[p.timePeriod] || 0;
+            let patientEarning = shiftRates.perPatient[p.timePeriod] || 0;
             if (p.age80plus) {
-                patientEarning += afaRates.agePremium;
+                patientEarning += shiftRates.age80Premium;
                 patientsOver80Count++;
+            } else if (p.age65plus) {
+                patientEarning += shiftRates.age65Premium;
+                patientsOver65Count++;
             }
             perPatientTotal += patientEarning;
         }
@@ -1875,6 +1905,7 @@ function calculateShiftTotals(shift) {
         patientBreakdown: patientBreakdown,
         basePay: basePay,
         patientsOver80Count: patientsOver80Count,
+        patientsOver65Count: patientsOver65Count,
         perPatientTotal: perPatientTotal,
         ohipTakeHome: ohipTakeHome,
         wsibTakeHome: wsibTotal,
@@ -2235,19 +2266,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         const perPatientBody = document.getElementById('per-patient-table');
         perPatientBody.innerHTML = '';
-         for(const period in afaRates.perPatient) {
-            const row = document.createElement('tr');
-            row.innerHTML = `<td class="px-4 py-2 capitalize">${period}</td><td class="px-4 py-2 text-right" contenteditable="true" data-period="${period}">$${afaRates.perPatient[period].toFixed(2)}</td>`;
-            perPatientBody.appendChild(row);
-        }
-        perPatientBody.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
-            cell.addEventListener('blur', (e) => {
-                const newRate = parseFloat(e.target.innerText.replace('$', ''));
-                if (!isNaN(newRate)) {
-                    afaRates.perPatient[e.target.dataset.period] = newRate;
-                    updateViews();
-                }
-            });
+        // Show both rate periods
+        const ratePeriods = [
+            { label: 'Pre-May 2026', rates: afaRates_pre2026May },
+            { label: 'May 2026+', rates: afaRates_may2026 }
+        ];
+        ratePeriods.forEach(rp => {
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = `<td colspan="3" class="px-4 py-1 bg-gray-100 text-xs font-semibold text-gray-600 uppercase">${rp.label}</td>`;
+            perPatientBody.appendChild(headerRow);
+            for (const period in rp.rates.perPatient) {
+                const row = document.createElement('tr');
+                const age65 = rp.rates.age65Premium > 0 ? ` <span class="text-xs text-purple-600">(+$${rp.rates.age65Premium} age 65-79)</span>` : '';
+                const age80 = ` <span class="text-xs text-blue-600">(+$${rp.rates.age80Premium} age 80+)</span>`;
+                row.innerHTML = `<td class="px-4 py-2 capitalize">${period}</td><td class="px-4 py-2 text-right font-medium">$${rp.rates.perPatient[period].toFixed(2)}</td><td class="px-4 py-2 text-left text-xs text-gray-500">${age65}${age80}</td>`;
+                perPatientBody.appendChild(row);
+            }
         });
     }
 });
