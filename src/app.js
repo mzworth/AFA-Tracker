@@ -796,7 +796,7 @@ function displayCurrentShiftEarnings() {
 
         if (row.querySelector('.is-wsib').checked) {
             // WSIB: 100% of billings + $85 premium. No per-patient stipend.
-            wsibFormFeeTotal += afaRates.wsibPremium;
+            wsibFormFeeTotal += getAfaRatesForDate(shiftDateInput.value).wsibPremium;
             wsibTotal += rowTotal;
             patientCounts[timePeriod].wsib++;
         } else if (row.querySelector('.is-ifh').checked) {
@@ -1852,7 +1852,7 @@ function calculateShiftTotals(shift) {
 
         if (p.isWSIB) {
             // WSIB: 100% of billings + $85 premium
-            wsibFormFeeTotal += afaRates.wsibPremium;
+            wsibFormFeeTotal += shiftRates.wsibPremium;
             wsibTotal += rowTotal;
             patientBreakdown.wsib++;
         } else if (p.isIFH) {
