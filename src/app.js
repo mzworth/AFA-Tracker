@@ -320,7 +320,7 @@ const appContainer = document.getElementById('app-container');
 const loadScheduleBtn = document.getElementById('loadScheduleBtn');
 const clearScheduleBtn = document.getElementById('clearScheduleBtn');
 const scheduleFileInput = document.getElementById('scheduleFileInput');
-const scheduleEffectiveDateInput = document.getElementById('scheduleEffectiveDateInput');
+// scheduleEffectiveDateInput removed — date is now collected inline during file load
 const scheduleStatus = document.getElementById('schedule-status');
 const addPatientBtn = document.getElementById('addPatientBtn');
 const saveDataBtn = document.getElementById('saveDataBtn');
@@ -437,8 +437,8 @@ function initializeWithScheduleData(storedData) {
     headerSubtitle.textContent = 'OHIP Fee Schedule is loaded from your browser\'s memory. Clear it to reload from file.';
 }
 
-async function parseFeeScheduleData(data) {
-    const effectiveDate = scheduleEffectiveDateInput.value || new Date().toISOString().split('T')[0];
+async function parseFeeScheduleData(data, effectiveDate) {
+    if (!effectiveDate) effectiveDate = new Date().toISOString().split('T')[0];
 
     const schedule = {};
     const anaeUnitsData = {};
@@ -980,14 +980,43 @@ async function performSave(shiftId) {
 function loadScheduleFile(event) {
     const file = event.target.files[0];
     if (!file) return;
+    scheduleFileInput.value = ''; // reset so same file can be re-selected
+
     const reader = new FileReader();
     reader.onload = function(e) {
-        try { parseFeeScheduleData(e.target.result); }
-        catch (error) {
-            console.error("Error parsing schedule file:", error);
-            scheduleStatus.textContent = "Error: Invalid fee schedule file.";
-            scheduleStatus.classList.add('text-red-600');
-        }
+        const fileContent = e.target.result;
+        const today = new Date().toISOString().split('T')[0];
+
+        // Show inline date-confirmation modal before parsing
+        genericModalTitle.textContent = 'Set Schedule Effective Date';
+        genericModalMessage.innerHTML = `
+            <p class="text-sm text-gray-600 mb-3">What date should <strong>${file.name}</strong> be effective from?</p>
+            <input type="date" id="modal-effective-date" class="table-input text-sm w-full" value="${today}">
+        `;
+        genericModalButtons.innerHTML = '';
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.textContent = 'Load Schedule';
+        confirmBtn.className = 'bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg';
+        confirmBtn.addEventListener('click', () => {
+            const chosenDate = document.getElementById('modal-effective-date').value || today;
+            hideModal();
+            try { parseFeeScheduleData(fileContent, chosenDate); }
+            catch (error) {
+                console.error("Error parsing schedule file:", error);
+                scheduleStatus.textContent = "Error: Invalid fee schedule file.";
+                scheduleStatus.classList.add('text-red-600');
+            }
+        });
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.className = 'bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg';
+        cancelBtn.addEventListener('click', hideModal);
+
+        genericModalButtons.appendChild(confirmBtn);
+        genericModalButtons.appendChild(cancelBtn);
+        genericModal.classList.remove('hidden');
     };
     reader.readAsText(file);
 }
@@ -2225,8 +2254,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateAfaRatesTable();
 
     // --- DB and Data Initialization ---
-    // Default effective date to today for new uploads
-    scheduleEffectiveDateInput.value = new Date().toISOString().split('T')[0];
 
     try {
         await openDB();
