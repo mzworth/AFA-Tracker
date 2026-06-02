@@ -1495,7 +1495,7 @@ function generateAnalyticsReport() {
 
     // Calculate stats
     let totalEarnings = 0, totalPatients = 0, totalOhipBillings = 0;
-    let totalAfaEarnings = 0, totalOhipTakeHome = 0, totalIfhTakeHome = 0, totalSelfPayTakeHome = 0, totalWsibTakeHome = 0, totalWsibForms = 0, totalPatientsOver80 = 0;
+    let totalAfaEarnings = 0, totalAfaBasePay = 0, totalAfaPerPatient = 0, totalOhipTakeHome = 0, totalIfhTakeHome = 0, totalSelfPayTakeHome = 0, totalWsibTakeHome = 0, totalWsibForms = 0, totalPatientsOver80 = 0;
     let monthlyPatientCounts = { ohip: 0, wsib: 0, ifh: 0, selfPay: 0 };
     let billingTotals = { ohip: 0, wsib: 0, ifh: 0, selfPay: 0 };
 
@@ -1625,6 +1625,8 @@ function generateAnalyticsReport() {
         monthlyPatientCounts.ifh += patientBreakdown.ifh;
         monthlyPatientCounts.selfPay += patientBreakdown.selfPay;
 
+        totalAfaBasePay += basePay;
+        totalAfaPerPatient += perPatientTotal;
         totalAfaEarnings += basePay + perPatientTotal;
         totalOhipTakeHome += ohipTakeHome;
         totalIfhTakeHome += ifhTakeHomeTotal;
@@ -1708,7 +1710,7 @@ function generateAnalyticsReport() {
 
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Earnings Breakdown</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="summary-card"><p class="summary-label">AFA Earnings (Base + Patient)</p><p class="summary-value">$${totalAfaEarnings.toFixed(2)}</p></div>
+            <div class="summary-card"><p class="summary-label">AFA Earnings (Base + Patient)</p><p class="summary-value">$${totalAfaEarnings.toFixed(2)}</p><p class="text-xs text-gray-400 mt-1">Base $${totalAfaBasePay.toFixed(2)} · Per-patient $${totalAfaPerPatient.toFixed(2)}</p></div>
             <div class="summary-card"><p class="summary-label">OHIP Shadow Earnings</p><p class="summary-value">$${totalOhipTakeHome.toFixed(2)}</p></div>
             <div class="summary-card"><p class="summary-label">IFH Earnings</p><p class="summary-value">$${totalIfhTakeHome.toFixed(2)}</p></div>
             <div class="summary-card"><p class="summary-label">Self-Pay Shadow Earnings</p><p class="summary-value">$${totalSelfPayTakeHome.toFixed(2)}</p></div>
