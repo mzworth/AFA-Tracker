@@ -749,7 +749,9 @@ function getRelativityPremium(dateStr) {
     if (!dateStr) return 1.10;
     const parts = dateStr.split('-');
     const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    return d >= new Date(2026, 3, 1) ? 1.048907 : 1.10;
+    // Apr 2026+ fee schedule already has current payable values — no additional multiplier needed.
+    // Pre-Apr 2026 used the 2000-era base schedule, so 10% relativity was applied to approximate current rates.
+    return d >= new Date(2026, 3, 1) ? 1.0 : 1.10;
 }
 
 const sedationModifiers = {
