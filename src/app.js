@@ -642,6 +642,7 @@ function addPatientRow(data = null) {
         <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-self-pay" ${data && data.isSelfPay ? 'checked' : ''}></td>
         <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-ifh" ${data && data.isIFH ? 'checked' : ''}></td>
         <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded is-trauma" ${data && data.isTrauma ? 'checked' : ''}></td>
+        <td class="p-2 text-center"><input type="checkbox" class="h-4 w-4 text-orange-500 border-gray-300 rounded is-stat" ${(data && data.isStatHoliday !== undefined) ? (data.isStatHoliday ? 'checked' : '') : (statHolidayCheckbox.checked ? 'checked' : '')}></td>
         ${codeCells}
         <td class="p-2 table-cell-total">$0.00</td>
         <td class="p-2 text-center"><button class="text-red-500 hover:text-red-700 remove-btn font-bold text-xl">&times;</button></td>
@@ -788,13 +789,15 @@ function displayCurrentShiftEarnings() {
         }
     }
 
-    let perPatientTotal = 0, wsibFormFeeTotal = 0, selfPayShadowTotal = 0, wsibTotal = 0, ifhTotal = 0, regularOhipTotal = 0;
+    let perPatientTotal = 0, wsibFormFeeTotal = 0, wsibTotal = 0, ifhTotal = 0;
+    let regularOhipStat = 0, regularOhipNonStat = 0, selfPayShadowStat = 0, selfPayShadowNonStat = 0;
     const patientCounts = { day: {total:0, ohip:0, wsib:0, ifh:0, selfPay:0}, evening: {total:0, ohip:0, wsib:0, ifh:0, selfPay:0}, night: {total:0, ohip:0, wsib:0, ifh:0, selfPay:0}, weekend: {total:0, ohip:0, wsib:0, ifh:0, selfPay:0} };
 
     rows.forEach(row => {
         const timePeriod = row.querySelector('.time-period').value;
         patientCounts[timePeriod].total++;
         const rowTotal = parseFloat(row.querySelector('.table-cell-total').textContent.replace('$', '')) || 0;
+        const isPatientStat = row.querySelector('.is-stat').checked;
 
         if (row.querySelector('.is-wsib').checked) {
             // WSIB: 100% of billings + $85 premium. No per-patient stipend.
@@ -807,7 +810,8 @@ function displayCurrentShiftEarnings() {
             patientCounts[timePeriod].ifh++;
         } else if (row.querySelector('.is-self-pay').checked) {
             // Self Pay: Shadow % + Per-patient stipend
-            selfPayShadowTotal += rowTotal;
+            if (isPatientStat) selfPayShadowStat += rowTotal;
+            else selfPayShadowNonStat += rowTotal;
             patientCounts[timePeriod].selfPay++;
 
             const rates = getAfaRatesForDate(shiftDateInput.value);
@@ -817,7 +821,8 @@ function displayCurrentShiftEarnings() {
             perPatientTotal += patientEarning;
         } else {
             // Standard OHIP: Shadow billing % + Per-patient stipend
-            regularOhipTotal += rowTotal;
+            if (isPatientStat) regularOhipStat += rowTotal;
+            else regularOhipNonStat += rowTotal;
             patientCounts[timePeriod].ohip++;
 
             const rates = getAfaRatesForDate(shiftDateInput.value);
@@ -828,11 +833,8 @@ function displayCurrentShiftEarnings() {
         }
     });
 
-    const isStatHolidayCheckboxChecked = statHolidayCheckbox.checked;
-    let ohipPercentage = isStatHolidayCheckboxChecked ? 0.63 : 0.38;
-
-    const ohipTakeHome = regularOhipTotal * ohipPercentage;
-    const selfPayTakeHome = selfPayShadowTotal * ohipPercentage;
+    const ohipTakeHome = regularOhipStat * 0.63 + regularOhipNonStat * 0.38;
+    const selfPayTakeHome = selfPayShadowStat * 0.63 + selfPayShadowNonStat * 0.38;
     const lastMinuteBonus = (shiftType !== 'On Call' && shiftType !== 'HOCC Call-In' && lastMinutePickupCheckbox.checked) ? 500 : 0;
     const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal + lastMinuteBonus;
 
@@ -958,6 +960,7 @@ async function performSave(shiftId) {
             timePeriod: row.querySelector('.time-period').value,
             age65plus: row.querySelector('.age-65-plus').checked,
             age80plus: row.querySelector('.age-80-plus').checked,
+            isStatHoliday: row.querySelector('.is-stat').checked,
             isWSIB: row.querySelector('.is-wsib').checked,
             isSelfPay: row.querySelector('.is-self-pay').checked,
             isIFH: row.querySelector('.is-ifh').checked,
@@ -1824,13 +1827,16 @@ function calculateShiftTotals(shift) {
         }
     }
 
-    let perPatientTotal = 0, wsibFormFeeTotal = 0, selfPayShadowTotal = 0, wsibTotal = 0, ifhTotal = 0, regularOhipTotal = 0, totalOhipBilled = 0;
+    let perPatientTotal = 0, wsibFormFeeTotal = 0, wsibTotal = 0, ifhTotal = 0, totalOhipBilled = 0;
     let patientBreakdown = { ohip: 0, wsib: 0, ifh: 0, selfPay: 0 };
     let patientsOver80Count = 0;
     let patientsOver65Count = 0;
     const shiftRates = getAfaRatesForDate(shift.id);
+    let regularOhipStat = 0, regularOhipNonStat = 0, selfPayShadowStat = 0, selfPayShadowNonStat = 0;
 
     (shift.patients || []).forEach(p => {
+        // Per-patient stat flag; fall back to shift-level for old saves that lack it
+        const isPatientStat = (p.isStatHoliday !== undefined) ? p.isStatHoliday : (shift.isStatHoliday || false);
 
         // --- Start of Corrected Calculation Logic ---
         const codes = p.codes || [];
@@ -1894,7 +1900,8 @@ function calculateShiftTotals(shift) {
             patientBreakdown.ifh++;
         } else if (p.isSelfPay) {
             // Self Pay: Shadow % + Per-patient stipend
-            selfPayShadowTotal += rowTotal;
+            if (isPatientStat) selfPayShadowStat += rowTotal;
+            else selfPayShadowNonStat += rowTotal;
             patientBreakdown.selfPay++;
 
             let patientEarning = shiftRates.perPatient[p.timePeriod] || 0;
@@ -1908,10 +1915,10 @@ function calculateShiftTotals(shift) {
             perPatientTotal += patientEarning;
         } else {
             // Standard OHIP: Shadow % + Per-patient stipend
-            regularOhipTotal += rowTotal;
+            if (isPatientStat) regularOhipStat += rowTotal;
+            else regularOhipNonStat += rowTotal;
             patientBreakdown.ohip++;
 
-            // Per patient incentives are OHIP only
             let patientEarning = shiftRates.perPatient[p.timePeriod] || 0;
             if (p.age80plus) {
                 patientEarning += shiftRates.age80Premium;
@@ -1924,9 +1931,8 @@ function calculateShiftTotals(shift) {
         }
     });
 
-    const ohipPercentage = shift.isStatHoliday ? 0.63 : 0.38;
-    const ohipTakeHome = regularOhipTotal * ohipPercentage;
-    const selfPayTakeHome = selfPayShadowTotal * ohipPercentage;
+    const ohipTakeHome = regularOhipStat * 0.63 + regularOhipNonStat * 0.38;
+    const selfPayTakeHome = selfPayShadowStat * 0.63 + selfPayShadowNonStat * 0.38;
     const lastMinuteBonus = shift.isLastMinutePickup ? 500 : 0;
 
     // Total Earnings = Base Pay + Per Patient (OHIP) + Shadow (OHIP) + 100% (Non-OHIP) + WSIB Bonus + Last-Minute
@@ -2214,7 +2220,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateShiftDropdown(e.target.value);
     });
 
-    statHolidayCheckbox.addEventListener('change', resetSavedBasePay);
+    statHolidayCheckbox.addEventListener('change', () => {
+        // Mark all existing patient rows to match
+        document.querySelectorAll('.patient-row .is-stat').forEach(cb => {
+            cb.checked = statHolidayCheckbox.checked;
+        });
+        resetSavedBasePay();
+        updateViews();
+    });
+
+    document.getElementById('addPatientBtnBottom').addEventListener('click', () => addPatientRow());
 
     // --- Sedation Modal Listeners ---
     sedationCalcBtn.addEventListener('click', () => {
