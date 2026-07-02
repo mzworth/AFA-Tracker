@@ -1430,9 +1430,9 @@ function displayCurrentShiftEarnings() {
     earningsCardsContainer.innerHTML = `
         <div class="summary-card"><p class="summary-label">Base Pay</p><p class="summary-value">$${basePay.toFixed(2)}</p></div>
         <div class="summary-card"><p class="summary-label">Per-Patient Earnings (OHIP + Self Pay)</p><p class="summary-value">$${perPatientTotal.toFixed(2)}</p></div>
-        <div class="summary-card"><p class="summary-label">OHIP Shadow (${(ohipPercentage * 100).toFixed(0)}%)</p><p class="summary-value">$${ohipTakeHome.toFixed(2)}</p></div>
+        <div class="summary-card"><p class="summary-label">OHIP Shadow Earnings</p><p class="summary-value">$${ohipTakeHome.toFixed(2)}</p></div>
         <div class="summary-card"><p class="summary-label">WSIB Earnings (100%)</p><p class="summary-value">$${wsibTotal.toFixed(2)}</p></div>
-        <div class="summary-card"><p class="summary-label">Self-Pay Shadow (${(ohipPercentage * 100).toFixed(0)}%)</p><p class="summary-value">$${selfPayTakeHome.toFixed(2)}</p></div>
+        <div class="summary-card"><p class="summary-label">Self-Pay Shadow Earnings</p><p class="summary-value">$${selfPayTakeHome.toFixed(2)}</p></div>
         <div class="summary-card"><p class="summary-label">WSIB Forms</p><p class="summary-value">$${wsibFormFeeTotal.toFixed(2)}</p></div>
         <div class="summary-card"><p class="summary-label">IFH Earnings (100%)</p><p class="summary-value">$${ifhTotal.toFixed(2)}</p></div>
         ${lastMinuteCard}
