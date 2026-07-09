@@ -301,6 +301,12 @@ function calculateHoccPay(hoursObj, isPremium) {
     return (isPremium ? HOCC_STIPEND_PREMIUM : HOCC_STIPEND_STANDARD) + hourlyPay;
 }
 
+function calculateExtraHoursPay(hoursObj) {
+    const d = hoursObj.day || 0, e = hoursObj.evening || 0;
+    const n = hoursObj.night || 0, w = hoursObj.weekend || 0;
+    return d * onCallRates.day + e * onCallRates.evening + n * onCallRates.night + w * onCallRates.weekend;
+}
+
 /** Returns true if the given YYYY-MM-DD date qualifies for HOCC premium. */
 function isHoccPremiumDate(dateStr) {
     if (!dateStr) return false;
@@ -357,6 +363,13 @@ const hoccWeekendHours = document.getElementById('hocc-weekend-hours');
 const hoccHoursWarning = document.getElementById('hocc-hours-warning');
 const lastMinutePickupContainer = document.getElementById('last-minute-pickup-container');
 const lastMinutePickupCheckbox = document.getElementById('last-minute-pickup-checkbox');
+const extraHoursContainer = document.getElementById('extra-hours-container');
+const extraHoursCheckbox = document.getElementById('extra-hours-checkbox');
+const extraHoursInputs = document.getElementById('extra-hours-inputs');
+const extraDayHours = document.getElementById('extra-day-hours');
+const extraEveningHours = document.getElementById('extra-evening-hours');
+const extraNightHours = document.getElementById('extra-night-hours');
+const extraWeekendHours = document.getElementById('extra-weekend-hours');
 
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 const exportJsonBtn = document.getElementById('exportJsonBtn');
@@ -836,10 +849,21 @@ function displayCurrentShiftEarnings() {
     const ohipTakeHome = regularOhipStat * 0.63 + regularOhipNonStat * 0.38;
     const selfPayTakeHome = selfPayShadowStat * 0.63 + selfPayShadowNonStat * 0.38;
     const lastMinuteBonus = (shiftType !== 'On Call' && shiftType !== 'HOCC Call-In' && lastMinutePickupCheckbox.checked) ? 500 : 0;
-    const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal + lastMinuteBonus;
+    const extraHoursPay = (shiftType !== 'On Call' && shiftType !== 'HOCC Call-In' && extraHoursCheckbox.checked)
+        ? calculateExtraHoursPay({
+            day: parseFloat(extraDayHours.value) || 0,
+            evening: parseFloat(extraEveningHours.value) || 0,
+            night: parseFloat(extraNightHours.value) || 0,
+            weekend: parseFloat(extraWeekendHours.value) || 0
+          })
+        : 0;
+    const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal + lastMinuteBonus + extraHoursPay;
 
     const lastMinuteCard = lastMinuteBonus > 0
         ? `<div class="summary-card border-2 border-green-400"><p class="summary-label">Last-Minute Pickup</p><p class="summary-value text-green-600">+$500.00</p></div>`
+        : '';
+    const extraHoursCard = extraHoursPay > 0
+        ? `<div class="summary-card border-2 border-indigo-400"><p class="summary-label">Extra Hours</p><p class="summary-value text-indigo-600">+$${extraHoursPay.toFixed(2)}</p></div>`
         : '';
 
     earningsCardsContainer.innerHTML = `
@@ -851,6 +875,7 @@ function displayCurrentShiftEarnings() {
         <div class="summary-card"><p class="summary-label">WSIB Forms</p><p class="summary-value">$${wsibFormFeeTotal.toFixed(2)}</p></div>
         <div class="summary-card"><p class="summary-label">IFH Earnings (100%)</p><p class="summary-value">$${ifhTotal.toFixed(2)}</p></div>
         ${lastMinuteCard}
+        ${extraHoursCard}
         <div class="summary-card bg-blue-500 text-white"><p class="summary-label text-blue-200">Total Earnings</p><p class="summary-value text-white">$${totalEarnings.toFixed(2)}</p></div>
         <div class="summary-card col-span-full"><p class="summary-label">Patient Breakdown (Total: ${rows.length})</p><div class="text-sm grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">${Object.keys(patientCounts).map(p => `<div><p class="font-semibold capitalize">${p} (Total: ${patientCounts[p].total})</p><p>OHIP: ${patientCounts[p].ohip}</p><p>WSIB: ${patientCounts[p].wsib}</p><p>IFH: ${patientCounts[p].ifh}</p><p>Self Pay: ${patientCounts[p].selfPay}</p></div>`).join('')}</div></div>`;
 }
@@ -942,6 +967,10 @@ async function performSave(shiftId) {
         hoccData: hoccData,
         isLastMinutePickup: (shiftTypeSaving !== 'On Call' && shiftTypeSaving !== 'HOCC Call-In')
             ? lastMinutePickupCheckbox.checked : false,
+        extraHours: (shiftTypeSaving !== 'On Call' && shiftTypeSaving !== 'HOCC Call-In' && extraHoursCheckbox.checked)
+            ? { day: parseFloat(extraDayHours.value) || 0, evening: parseFloat(extraEveningHours.value) || 0,
+                night: parseFloat(extraNightHours.value) || 0, weekend: parseFloat(extraWeekendHours.value) || 0 }
+            : null,
         patients: []
     };
 
@@ -1272,6 +1301,14 @@ function loadShiftData(shiftId) {
                 toggleOnCallUI('regular');
                 statHolidayCheckbox.checked = shiftData.isStatHoliday;
                 lastMinutePickupCheckbox.checked = shiftData.isLastMinutePickup || false;
+                if (shiftData.extraHours) {
+                    extraHoursCheckbox.checked = true;
+                    extraHoursInputs.classList.remove('hidden');
+                    extraDayHours.value = shiftData.extraHours.day || 0;
+                    extraEveningHours.value = shiftData.extraHours.evening || 0;
+                    extraNightHours.value = shiftData.extraHours.night || 0;
+                    extraWeekendHours.value = shiftData.extraHours.weekend || 0;
+                }
             }
 
             // Set active saved base pay
@@ -1316,6 +1353,7 @@ function toggleOnCallUI(type) {
 
     statHolidayContainer.classList.toggle('hidden', !isRegular);
     lastMinutePickupContainer.classList.toggle('hidden', !isRegular);
+    extraHoursContainer.classList.toggle('hidden', !isRegular);
     onCallHoursContainer.classList.toggle('hidden', !isOnCall);
     hoccContainer.classList.toggle('hidden', !isHocc);
 
@@ -1335,6 +1373,12 @@ function toggleOnCallUI(type) {
     }
     if (!isRegular) {
         lastMinutePickupCheckbox.checked = false;
+        extraHoursCheckbox.checked = false;
+        extraHoursInputs.classList.add('hidden');
+        extraDayHours.value = '';
+        extraEveningHours.value = '';
+        extraNightHours.value = '';
+        extraWeekendHours.value = '';
     }
 
     // Auto-select premium tier when HOCC section opens based on date
@@ -1934,9 +1978,9 @@ function calculateShiftTotals(shift) {
     const ohipTakeHome = regularOhipStat * 0.63 + regularOhipNonStat * 0.38;
     const selfPayTakeHome = selfPayShadowStat * 0.63 + selfPayShadowNonStat * 0.38;
     const lastMinuteBonus = shift.isLastMinutePickup ? 500 : 0;
+    const extraHoursPay = shift.extraHours ? calculateExtraHoursPay(shift.extraHours) : 0;
 
-    // Total Earnings = Base Pay + Per Patient (OHIP) + Shadow (OHIP) + 100% (Non-OHIP) + WSIB Bonus + Last-Minute
-    const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal + lastMinuteBonus;
+    const totalEarnings = basePay + perPatientTotal + ohipTakeHome + selfPayTakeHome + wsibTotal + ifhTotal + wsibFormFeeTotal + lastMinuteBonus + extraHoursPay;
 
     return {
         earnings: totalEarnings,
@@ -2230,6 +2274,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     document.getElementById('addPatientBtnBottom').addEventListener('click', () => addPatientRow());
+
+    extraHoursCheckbox.addEventListener('change', () => {
+        extraHoursInputs.classList.toggle('hidden', !extraHoursCheckbox.checked);
+        updateViews();
+    });
+    [extraDayHours, extraEveningHours, extraNightHours, extraWeekendHours].forEach(input => {
+        input.addEventListener('input', updateViews);
+    });
 
     // --- Sedation Modal Listeners ---
     sedationCalcBtn.addEventListener('click', () => {

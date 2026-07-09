@@ -76,6 +76,32 @@
                                  </div>
                              </div>
 
+                             <!-- Extra Hours Section (regular shifts only, hidden by default) -->
+                             <div id="extra-hours-container" class="hidden mt-4 pt-4 border-t border-gray-100">
+                                 <div class="flex items-center gap-2 mb-3">
+                                     <input id="extra-hours-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                     <label for="extra-hours-checkbox" class="text-sm font-semibold text-gray-700">Extra Hours Worked <span class="text-indigo-600 font-normal">(early in / stayed late — paid at on-call rates)</span></label>
+                                 </div>
+                                 <div id="extra-hours-inputs" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4">
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Day (08–17) — $60/hr</label>
+                                         <input type="number" id="extra-day-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Evening (17–00) — $72/hr</label>
+                                         <input type="number" id="extra-evening-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Night (00–08) — $105/hr</label>
+                                         <input type="number" id="extra-night-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                     <div>
+                                         <label class="block text-xs text-gray-500">Weekend — $90/hr</label>
+                                         <input type="number" id="extra-weekend-hours" class="table-input w-full mt-1" min="0" step="0.5" placeholder="0">
+                                     </div>
+                                 </div>
+                             </div>
+
                              <!-- On Call Hours Section (Hidden by default) -->
                              <div id="on-call-hours-container" class="hidden mt-4 pt-4 border-t border-gray-100">
                                  <h3 class="text-sm font-semibold text-gray-700 mb-2">On Call Hours Worked</h3>
